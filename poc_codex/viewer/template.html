@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Robot Run · Local Viewer</title>
+<style>
+:root{color-scheme:dark;--bg:#080e18;--panel:#111c2d;--muted:#93a4b9;--line:#253349;--mint:#6de0cb;--amber:#f1be76;--red:#ff9393;--text:#e5edf7}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 30% 0,#18263b,transparent 65%),var(--bg);color:var(--text);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans KR",sans-serif}button,select{font:inherit;color:inherit;background:#19263a;border:1px solid var(--line);border-radius:7px;padding:8px 13px;cursor:pointer}button:hover{border-color:var(--mint);background:#21354a}button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:2px solid var(--mint);outline-offset:3px}button:disabled{opacity:.4;cursor:default}button.primary{color:#062f2b;background:var(--mint);border-color:var(--mint);font-weight:650}h1,h2,p{margin:0}h1{font-size:23px;letter-spacing:-.6px}h2{font-size:15px;font-weight:600}small,.muted{color:var(--muted)}.mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-variant-numeric:tabular-nums}.eyebrow{font-size:10px;letter-spacing:2px;color:var(--mint);font-weight:600}.shell{max-width:1500px;margin:auto;padding:30px 32px}.topbar,.row{display:flex;align-items:center;gap:12px}.topbar{justify-content:space-between;margin-bottom:24px}.topbar small{display:block;margin-top:5px}.top-actions{display:flex;align-items:center;gap:10px}.local{font-size:11px;color:var(--mint);letter-spacing:1px}.dot{display:inline-block;width:6px;height:6px;background:currentColor;border-radius:50%;margin-right:5px}.workspace{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#0d1624;box-shadow:0 25px 70px #0004}.taskbar{display:flex;align-items:center;gap:18px;padding:20px 23px;border-bottom:1px solid var(--line)}.task{font-size:19px;flex:1}.badge{border:1px solid var(--line);border-radius:5px;padding:4px 8px;font:11px ui-monospace,monospace;white-space:nowrap;color:var(--muted)}.cameras{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;background:var(--line)}.camera{position:relative;border:0;border-radius:0;padding:0;aspect-ratio:16/10;background:#050a12;overflow:hidden;width:100%;display:flex;align-items:center;justify-content:center}.camera:hover{background:#050a12}.camera img{width:100%;height:100%;object-fit:contain}.camera .label{position:absolute;left:12px;top:12px;background:#07111dde;border:1px solid #ffffff20;border-radius:4px;padding:4px 9px;font:11px ui-monospace,monospace;letter-spacing:1px}.camera .stamp{position:absolute;left:12px;bottom:10px;color:#e0e8f1;font:10px ui-monospace,monospace;background:#07111dd9;padding:3px 6px;border-radius:3px}.camera .empty{position:absolute;color:var(--muted)}.camera img:not([src]){display:none}.below{padding:20px}.statusbar{display:flex;align-items:center;gap:18px;margin-bottom:18px;flex-wrap:wrap}.model{color:var(--mint);font-size:15px;font-weight:600}.divider{width:1px;height:18px;background:var(--line)}.statusbar .mode{margin-left:auto;display:flex;gap:4px}.mode button{padding:5px 10px;font-size:12px;background:transparent}.mode button.active{background:#203e43;border-color:#47857b;color:var(--mint)}.panels{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}.panel{background:var(--panel);border:1px solid #ffffff05;border-radius:10px;padding:20px;min-width:0}.panelhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}.panelhead h2{color:#bed0e6}.label-sm{color:var(--muted);font-size:11px;letter-spacing:.8px;margin-bottom:7px}.rationale{font-size:17px;line-height:1.7;min-height:90px;overflow-wrap:anywhere}.source{margin-top:15px;padding-top:13px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.facts{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:19px}.fact{padding:10px 12px;background:#0e1726;border-radius:6px}.fact small{display:block;font-size:10px;margin-bottom:4px}.fact span{font-size:12px}.kv{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid #ffffff07;font-size:12px}.kv span:first-child{color:var(--muted)}.kv span:last-child{text-align:right;overflow-wrap:anywhere}.outcome{margin-top:12px;font-size:12px;overflow-wrap:anywhere}.good{color:var(--mint)}.warn{color:var(--amber)}.bad{color:var(--red)}.player{margin-top:20px;padding-top:18px;border-top:1px solid var(--line)}input[type=range]{accent-color:var(--mint);width:100%;cursor:pointer}.player-controls{display:flex;align-items:center;gap:9px;margin-top:8px}.player-controls .time{margin-left:auto;color:var(--muted);font-size:12px}.player-controls button{min-width:42px}.player-controls select{font-size:12px}.notice{font-size:11px;color:var(--muted);margin-top:10px}.history-head{display:flex;align-items:center;justify-content:space-between;margin:26px 0 12px}.history-head small{font-size:11px}.history{display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;scrollbar-color:#38516c transparent}.event{flex:0 0 138px;text-align:left;background:#101b2b;padding:12px;border-radius:8px}.event.active{border-color:var(--mint);background:#15332f}.event .n{font-size:10px;color:var(--muted)}.event .name{display:block;margin:6px 0 8px;font-size:12px}.event .state{font-size:10px}.summary{display:flex;gap:20px;flex-wrap:wrap;justify-content:space-between;border-top:1px solid var(--line);padding:17px 0;margin-top:5px;font-size:12px;color:var(--muted)}details{margin-top:10px;color:var(--muted);font-size:12px}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#0b1421;padding:15px;border-radius:8px;max-height:350px;overflow:auto;color:#b4c7dd}#error{color:var(--red);margin:10px 0;white-space:pre-wrap}dialog{max-width:95vw;width:1100px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--text);padding:18px}dialog::backdrop{background:#000c}dialog img{width:100%;max-height:78vh;object-fit:contain}dialog .row{justify-content:space-between;margin-bottom:10px}.foot{font-size:11px;color:#788a9f;margin-top:12px}.hidden{display:none!important}@media(min-width:1500px){.shell{padding-top:45px}}@media(max-width:850px){.shell{padding:18px 14px}.panels{grid-template-columns:1fr}.statusbar{gap:10px}.statusbar .mode{margin-left:0}.camera .label{font-size:9px;left:5px;top:5px;padding:3px 5px}.task{font-size:16px}.topbar{align-items:flex-start}.local{display:none}}@media(max-width:540px){.cameras{grid-template-columns:1fr}.camera{aspect-ratio:16/9}.taskbar{flex-wrap:wrap;gap:8px}.task{flex-basis:80%}.below{padding:14px}.top-actions button{font-size:12px}.player-controls{flex-wrap:wrap}.facts{grid-template-columns:1fr}.topbar small{font-size:11px}}
+.live-settings{margin:0 0 18px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 18px}.live-settings summary{color:var(--text)}.live-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}.live-fields label{display:flex;flex-direction:column;gap:6px;font-size:11px;color:var(--muted)}.live-fields input,.live-fields select{width:100%;min-width:0;padding:9px;border-radius:6px;border:1px solid var(--line);background:#0c1523;color:var(--text);font-size:12px}.camera.expanded{grid-column:1/-1;aspect-ratio:16/8}.live-settings .row{flex-wrap:wrap}#liveError{margin-top:10px;font-size:12px}@media(max-width:850px){.live-fields{grid-template-columns:1fr}.top-actions{flex-wrap:wrap;justify-content:flex-end}.topbar{gap:8px}}
+</style>
+</head>
+<body>
+<main class="shell">
+<header class="topbar"><div><div class="eyebrow">ROBOT OBSERVATORY</div><h1>Robot run viewer</h1><small>로봇의 관측, 판단 근거, 실행 결과를 한눈에.</small></div><div class="top-actions"><span class="local" id="connectionMode"><span class="dot"></span>LOCAL · OFFLINE</span><button id="liveSettingsButton">실시간 카메라</button><button id="openFolder">폴더 열기</button><input id="folder" type="file" webkitdirectory multiple hidden></div></header>
+<p id="error" role="alert"></p>
+<details id="liveSettings" class="live-settings">
+<summary>실시간 카메라 연결 · Cyclo 영상 브리지</summary>
+<form id="liveForm">
+<div class="live-fields">
+<label>영상 브리지 주소<input id="streamBase" type="url" value="http://localhost:7085" required spellcheck="false"></label>
+<label>영상 전송 방식<select id="streamTransport"><option value="raw">Raw Image → MJPEG</option><option value="compressed">CompressedImage · Cyclo 방식</option></select></label>
+<label>토픽 프리셋<select id="topicPreset"><option value="robot">실물 · config.yaml</option><option value="gazebo">Gazebo · config_gazebo.yaml</option></select></label>
+<label>HEAD 토픽<input id="topicHead" value="/zed/zed_node/rgb/image_rect_color" required spellcheck="false"></label>
+<label>LEFT 토픽<input id="topicLeft" value="/camera_left/camera_left/color/image_rect_raw" required spellcheck="false"></label>
+<label>RIGHT 토픽<input id="topicRight" value="/camera_right/camera_right/color/image_rect_raw" required spellcheck="false"></label>
+</div>
+<div class="row"><button class="primary" type="submit">연결 / 다시 연결</button><button type="button" id="disconnectLive" disabled>연결 해제</button><span id="liveStatus" role="status">연결 전</span></div>
+<p class="notice">Cyclo가 실행 중인 PC의 주소를 입력하세요. 페이지용 서버는 필요 없으며, ROS 영상 브리지(web_video_server)는 실행 중이어야 합니다. 압축 토픽이 없으면 Raw를 선택하세요.</p>
+<p id="liveError" class="bad" role="alert"></p>
+</form>
+</details>
+<section class="workspace" aria-label="실행 기록 뷰어">
+<div class="taskbar"><span class="eyebrow">TASK</span><p class="task" id="task">기록을 불러오는 중…</p><span class="badge">RECORDED RUN</span></div>
+<div class="cameras">
+<button class="camera" data-camera="head" aria-label="Head 관측 이미지 확대"><span class="empty">저장된 이미지 없음</span><img alt="Head 관측"><span class="label">HEAD VIEW</span><span class="stamp"></span></button>
+<button class="camera" data-camera="wrist_left" aria-label="왼쪽 손목 관측 이미지 확대"><span class="empty">저장된 이미지 없음</span><img alt="왼쪽 손목 관측"><span class="label">LEFT WRIST</span><span class="stamp"></span></button>
+<button class="camera" data-camera="wrist_right" aria-label="오른쪽 손목 관측 이미지 확대"><span class="empty">저장된 이미지 없음</span><img alt="오른쪽 손목 관측"><span class="label">RIGHT WRIST</span><span class="stamp"></span></button>
+</div>
+<div class="below">
+<div class="statusbar"><span class="model" id="model"></span><span class="divider"></span><span class="mono" id="step"></span><span class="badge" id="status"></span><div class="mode" role="group" aria-label="관측 이미지 선택"><button id="liveView" aria-pressed="false" disabled>실시간 카메라</button><button id="before" class="active" aria-pressed="true">판단에 사용한 관측</button><button id="after" aria-pressed="false">실행 후 관측</button></div></div>
+<div class="panels">
+<section class="panel"><div class="panelhead"><h2>모델의 판단 근거</h2><span class="eyebrow">DECISION</span></div><div class="label-sm">RECORDED ACTION REASON</div><p class="rationale" id="reason"></p><p class="source" id="source"></p><div class="facts"><div class="fact"><small>선택한 동작</small><span id="action"></span></div><div class="fact"><small id="observationLabel">표시 중인 관측</small><span class="mono" id="observation"></span></div></div></section>
+<section class="panel"><div class="panelhead"><h2>명령과 실행 결과</h2><span class="eyebrow">EXECUTION</span></div><div id="command"></div><p class="outcome" id="outcome"></p></section>
+</div>
+<div class="player"><input id="scrubber" type="range" min="0" max="0" value="0" aria-label="도구 호출 선택"><div class="player-controls"><button id="prev" aria-label="이전 호출">←</button><button id="play" class="primary">▶ 재생</button><button id="next" aria-label="다음 호출">→</button><select id="speed" aria-label="재생 속도"><option value="1">1× 기록 간격</option><option value="4" selected>4× 기록 간격</option><option value="8">8× 기록 간격</option></select><span class="time mono" id="time"></span></div><p class="notice" id="viewNotice">관측 시점별 이미지 재생입니다. 판단 근거는 모델이 도구 호출에 기록한 원문이며, 실시간 영상이나 전체 내부 사고 기록이 아닙니다.</p></div>
+</div></section>
+<div class="history-head"><h2>실행 타임라인</h2><small>호출을 선택해 근거 관측과 결과 비교 · ← → 이동 / Space 재생</small></div><nav class="history" id="history" aria-label="실행 이력"></nav>
+<div class="summary"><span id="runId"></span><span id="runSummary"></span></div>
+<details><summary>선택한 호출의 원본 데이터</summary><pre id="raw"></pre></details>
+<p class="foot">모든 데이터는 이 브라우저 안에서 처리됩니다. 다른 기록은 runs 아래의 실행 폴더 하나를 선택하세요.</p>
+</main>
+<dialog id="lightbox"><div class="row"><span id="lightboxTitle"></span><button id="closeLightbox">닫기 ✕</button></div><img id="largeImage" alt="확대한 관측 이미지"></dialog>
+<script id="run-data" type="application/json">__RUN_FILES__</script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const state={files:{},events:[],index:0,view:'before',timer:null,urls:[]};
+const names={robot_start:'첫 관측',robot_observe:'다시 관측',robot_move:'팔 이동',robot_head:'헤드 조정',robot_lift:'리프트 이동',robot_gripper:'그리퍼 조작',task_complete:'완료 선언'};
+const statuses={ok:'관측 완료',arrived:'목표 도달',observed:'관측 완료',stopped:'목표 전 정지',timeout:'시간 초과',rejected:'명령 거부',completed:'완료 선언',pending:'결과 미기록'};
+const text=(id,value)=>{$(id).textContent=value??'—'};
+const num=(v,d=3)=>typeof v==='number'&&Number.isFinite(v)?v.toFixed(d):'—';
+const signed=v=>typeof v==='number'&&Number.isFinite(v)?`${v>=0?'+':''}${v.toFixed(1)}`:'—';
+const clock=s=>Number.isFinite(s)?`${Math.floor(Math.max(0,s)/60).toString().padStart(2,'0')}:${Math.floor(Math.max(0,s)%60).toString().padStart(2,'0')}`:'—';
+const color=s=>s==='arrived'||s==='observed'||s==='ok'?'good':s==='timeout'||s==='rejected'?'bad':'warn';
+function parse(files,key,fallback={}){if(!(key in files))return fallback;try{return JSON.parse(files[key])}catch{throw new Error(`JSON 형식을 확인하세요: ${key}`)}}
+function normalize(files){
+ const run=parse(files,'run.json',null);if(!run)throw new Error('run.json이 있는 실행 폴더 하나를 선택하세요.');
+ const host=parse(files,'host_result.json');
+ const observations=Object.keys(files).filter(k=>/^public\/observations\/[^/]+\/observation.json$/.test(k)).sort().map(k=>({...parse(files,k),folder:k.slice(0,k.lastIndexOf('/'))}));
+ const byId=new Map(observations.map(o=>[o.observation_id,o]));
+ const histories=(files['public/history.jsonl']||'').split('\n').filter(l=>l.trim()).map((l,i)=>{try{return JSON.parse(l)}catch{throw new Error(`history.jsonl ${i+1}행이 완전하지 않습니다. 기록 후 다시 불러오세요.`)}});
+ const byRequest=new Map();for(const h of histories){const id=h.action_context?.request_id;if(id&&h.observation)byRequest.set(id,byId.get(h.observation.observation_id)||h.observation)}
+ const requests=Object.keys(files).filter(k=>/^calls\/[^/]+_request.json$/.test(k)).sort().map(k=>parse(files,k));
+ const records=Object.keys(files).filter(k=>/^rollout\/\d+_.*\.json$/.test(k)).sort().map(k=>({index:Number(k.split('/')[1].split('_')[0]),...parse(files,k)}));
+ const events=records.map(r=>{
+  const h=histories.find(h=>h.progress?.call_index===r.index);
+  const req=requests.find(q=>q.tool===r.tool&&q.arguments?.request_id===r.arguments?.request_id);
+  const before=byRequest.get(r.arguments?.request_id)||byId.get(r.result?.data?.accepted_request?.observation_id)||null;
+  const after=byId.get(h?.observation?.observation_id)||null;
+  return {index:r.index,tool:r.tool,args:r.arguments||{},result:r.result||{},before,after,at:r.at,started:req?.started_at,progress:h?.progress,raw:r};
+ });
+ // Requests are written before a tool finishes, so partially recorded runs remain useful.
+ for(const q of requests){if(events.some(e=>e.tool===q.tool&&e.args.request_id===q.arguments?.request_id))continue;
+ const h=histories.find(h=>h.progress?.call_index===q.index+1);
+ events.push({index:q.index+1,tool:q.tool,args:q.arguments||{},result:h?{status:h.status,reason:h.reason,data:h.result}:{status:'pending'},before:byRequest.get(q.arguments?.request_id)||null,after:byId.get(h?.observation?.observation_id)||null,at:h?.at||q.started_at,started:q.started_at,progress:h?.progress,raw:q});}
+ if(!events.length)for(const h of histories)events.push({index:h.progress?.call_index||events.length+1,tool:h.tool,args:{},result:{status:h.status,reason:h.reason,data:h.result},before:null,after:byId.get(h.observation?.observation_id)||null,at:h.at,progress:h.progress,raw:h});
+ events.sort((a,b)=>a.index-b.index);
+ if(!events.length)throw new Error('표시할 도구 호출이 없습니다. calls, rollout 또는 public/history.jsonl을 확인하세요.');
+ return {run,host,events};
+}
+function load(files){const data=normalize(files);window.disconnectLiveCameras?.();stop();Object.assign(state,{files,...data,index:0,view:'before'});$('scrubber').max=state.events.length-1;text('task',data.run.task);text('model',data.run.model);text('runId',`RUN ${data.run.run_id||'—'}`);const r=data.host.rollout||{};text('runSummary',`종료: ${data.host.end_reason||'종료 기록 없음'} · 기록된 실행 ${r.actions_executed??'—'}회 · 관측 ${r.observations??'—'}개 · ${num(data.host.elapsed_s,1)}s`);$('history').replaceChildren();data.events.forEach((e,i)=>{const b=document.createElement('button');b.className='event';const n=document.createElement('span');n.className='n mono';n.textContent=`CALL ${String(e.index).padStart(2,'0')}`;const name=document.createElement('span');name.className='name';name.textContent=names[e.tool]||e.tool;const s=document.createElement('span');s.className=`state ${color(e.result.status)}`;s.textContent=statuses[e.result.status]||e.result.status||'기록 없음';b.append(n,name,s);b.onclick=()=>select(i);$('history').append(b)});text('error','');render();}
+function kv(label,value){const row=document.createElement('div');row.className='kv';const a=document.createElement('span'),b=document.createElement('span');a.textContent=label;b.textContent=value;row.append(a,b);$('command').append(row)}
+function render(){
+ const e=state.events[state.index];if(!e)return;const a=e.args,d=e.result.data||{},arrival=d.arrival||{};
+ const o=state.view==='before'?e.before:e.after;
+ // A start/observe call has no prior evidence image, so show its captured observation explicitly.
+ const shown=o||(['robot_start','robot_observe'].includes(e.tool)?e.after:null);
+ text('step',`Call ${String(e.index).padStart(2,'0')} / ${state.events.length}`);text('status',statuses[e.result.status]||e.result.status||'기록 없음');$('status').className=`badge ${color(e.result.status)}`;
+ text('reason',a.reason||'이 호출에는 모델이 기록한 판단 근거가 없습니다.');text('source',e.before?`근거: 관측 #${String(e.before.observation_number).padStart(3,'0')} · arguments.reason 원문`:'근거 관측 연결 없음 · 저장된 기록 기준');
+ text('action',`${names[e.tool]||e.tool}${a.arm?' · '+a.arm.toUpperCase():''}`);text('observation',shown?`#${String(shown.observation_number).padStart(3,'0')} · ROS ${num(shown.stamp_s)}s`:'해당 시점의 저장된 관측 없음');
+ if(state.view!=='live')document.querySelectorAll('.camera').forEach(el=>{const key=shown?.folder?`${shown.folder}/${el.dataset.camera}.jpg`:'';const src=state.files[key];const img=el.querySelector('img');img.onload=()=>{el.querySelector('.empty').hidden=true};img.onerror=()=>{img.removeAttribute('src');el.querySelector('.empty').hidden=false};if(src){img.src=src;el.querySelector('.empty').hidden=true}else{img.removeAttribute('src');el.querySelector('.empty').hidden=false}el.querySelector('.stamp').textContent=shown?`OBS ${String(shown.observation_number).padStart(3,'0')} · SNAPSHOT`:'NO SAVED FRAME'});
+ if(state.view==='live')window.updateLiveLabels?.();
+ for(const view of ['before','after']){$(view).classList.toggle('active',state.view===view);$(view).setAttribute('aria-pressed',String(state.view===view))}
+ $('liveView').classList.toggle('active',state.view==='live');$('liveView').setAttribute('aria-pressed',String(state.view==='live'));
+ $('command').replaceChildren();kv('도구',e.tool);kv('명령 전송',e.result.command_sent===true?'전송됨':e.result.command_sent===false?'전송 안 됨':'기록 없음');
+ if(e.tool==='robot_move'){kv('목표 XYZ · m',['x','y','z'].map(k=>num(a[k],4)).join(' / '));const xyz=e.before?.arms?.[a.arm]?.xyz;if(xyz)kv('요청 ΔXYZ · cm',['x','y','z'].map((k,i)=>signed((a[k]-xyz[i])*100)).join(' / '));const actual=arrival.pose;if(actual)kv('측정 XYZ · m',['x','y','z'].map(k=>num(actual[k],4)).join(' / '));kv('위치 / 회전 오차',`${num(arrival.position_error_m==null?null:arrival.position_error_m*1000,1)} mm / ${num(arrival.orientation_error_deg,2)}°`)}
+ if(e.tool==='robot_gripper'){kv('대상',a.arm||'—');kv('그리퍼 목표',`${num(a.value,2)} · 0 열림 / 1 닫힘`)}
+ if(e.tool==='robot_head')kv('헤드 목표 · rad',`${num(a.head_joint1)} / ${num(a.head_joint2)}`);
+ if(e.tool==='robot_lift'){kv('리프트 목표',`${num(a.position_m,4)} m`);kv('리프트 측정',`${num(arrival.joints?.lift_joint?.position,4)} m`);kv('리프트 오차',`${num(arrival.errors?.lift_joint==null?null:arrival.errors.lift_joint*1000,1)} mm`)}
+ kv('도달 판정',arrival.arrived===true?'도달 확인':arrival.arrived===false?'도달 미확인':'해당 없음 / 기록 없음');kv('동작 소요 시간',`${num(arrival.elapsed_s,2)} s`);text('outcome',e.result.reason||'실행 결과가 아직 기록되지 않았습니다.');$('outcome').className=`outcome ${color(e.result.status)}`;
+ $('scrubber').value=state.index;$('prev').disabled=state.index===0;$('next').disabled=state.index===state.events.length-1;
+ const start=Date.parse(state.run.created_at||state.events[0].started||state.events[0].at);text('time',`${clock((Date.parse(e.at)-start)/1000)} / ${clock((Date.parse(state.events.at(-1).at)-start)/1000)} · 호출 기록 시각`);
+ Array.from($('history').children).forEach((b,i)=>{b.classList.toggle('active',i===state.index);b.setAttribute('aria-current',i===state.index?'step':'false')});text('raw',JSON.stringify(e.raw,null,2));
+}
+function scrollHistory(){const h=$('history'),b=h.children[state.index];if(b)h.scrollTo({left:b.offsetLeft-h.offsetLeft-h.clientWidth/2+b.clientWidth/2,behavior:'smooth'})}
+function stop(){clearTimeout(state.timer);state.timer=null;text('play','▶ 재생')}
+function select(i){stop();state.index=Math.max(0,Math.min(i,state.events.length-1));render();scrollHistory()}
+function schedule(){if(state.index>=state.events.length-1){stop();return}const current=state.events[state.index],next=state.events[state.index+1];const gap=(Date.parse(next.at)-Date.parse(current.at))/Number($('speed').value);state.timer=setTimeout(()=>{state.index++;render();scrollHistory();schedule()},Number.isFinite(gap)?Math.max(200,gap):1000)}
+function togglePlay(){if(state.timer!==null){stop();return}if(!state.events.length)return;if(state.index===state.events.length-1){state.index=0;render()}text('play','Ⅱ 일시정지');schedule()}
+$('prev').onclick=()=>select(state.index-1);$('next').onclick=()=>select(state.index+1);$('play').onclick=togglePlay;$('scrubber').oninput=e=>select(Number(e.target.value));$('speed').onchange=()=>{if(state.timer!==null){clearTimeout(state.timer);schedule()}};
+for(const view of ['before','after'])$(view).onclick=()=>{window.disconnectLiveCameras?.();state.view=view;render()};
+document.addEventListener('keydown',e=>{if(['INPUT','SELECT','BUTTON','SUMMARY'].includes(document.activeElement.tagName)||$('lightbox').open)return;if(e.key==='ArrowLeft'){e.preventDefault();select(state.index-1)}if(e.key==='ArrowRight'){e.preventDefault();select(state.index+1)}if(e.code==='Space'){e.preventDefault();togglePlay()}});
+document.querySelectorAll('.camera').forEach(el=>el.onclick=()=>{const src=el.querySelector('img').getAttribute('src');if(!src)return;$('largeImage').src=src;text('lightboxTitle',`${el.querySelector('.label').textContent} · ${el.querySelector('.stamp').textContent}`);$('lightbox').showModal()});$('closeLightbox').onclick=()=>$('lightbox').close();
+$('openFolder').onclick=()=>$('folder').click();
+$('folder').onchange=async event=>{
+ const files={},urls=[];stop();$('openFolder').disabled=true;
+ try{for(const f of event.target.files){const key=f.webkitRelativePath.split('/').slice(1).join('/');if(/^(run|host_result|result)\.json$|^public\/history\.jsonl$|^rollout\/[^/]+\.json$|^calls\/[^/]+_request\.json$|^public\/observations\/[^/]+\/observation\.json$/.test(key))files[key]=await f.text();else if(/^public\/observations\/[^/]+\/[^/]+\.jpg$/.test(key)){files[key]=URL.createObjectURL(f);urls.push(files[key])}}load(files);state.urls.forEach(u=>URL.revokeObjectURL(u));state.urls=urls}catch(e){urls.forEach(u=>URL.revokeObjectURL(u));text('error',e.message)}finally{$('openFolder').disabled=false;event.target.value=''}
+};
+try{load(JSON.parse($('run-data').textContent))}catch(e){text('error',e.message)}
+</script>
+<script>
+__LIVE_SCRIPT__
+</script>
+</body>
+</html>
