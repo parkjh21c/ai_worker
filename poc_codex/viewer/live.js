@@ -12,10 +12,10 @@
   function buildStreamUrl(base, topic, transport) {
     const url = new URL(base);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash)
-      throw new Error('영상 브리지 주소는 http://PC주소:7085 형태로 입력하세요.');
+      throw new Error('Enter the video bridge URL as http://HOST:7085.');
     topic = topic.trim();
     if (!/^\/[A-Za-z0-9_/]+$/.test(topic))
-      throw new Error('카메라 토픽은 /로 시작하는 ROS 토픽 이름이어야 합니다.');
+      throw new Error('Camera topics must be ROS names starting with /.');
     if (transport === 'compressed' && topic.endsWith('/compressed')) topic = topic.slice(0, -11);
     // Cyclo's server expects literal slashes in the topic parameter.
     const type = transport === 'compressed' ? 'ros_compressed' : 'mjpeg';
@@ -25,9 +25,9 @@
   window.buildCameraStreamUrl = buildStreamUrl;
 
   window.updateLiveLabels = () => {
-    text('observationLabel', '카메라 영상');
-    text('observation', 'LIVE SOURCE · 하단 판단은 선택한 기록 기준');
-    text('viewNotice', '상단은 현재 카메라 스트림, 하단 판단·명령은 선택한 run의 저장 기록입니다. 서로 같은 시점이 아닙니다. 영상 스트림은 프레임 시각을 제공하지 않아 최신 프레임 여부를 판정하지 않습니다.');
+    text('observationLabel', 'Camera feed');
+    text('observation', 'LIVE SOURCE · decisions below use the selected record');
+    text('viewNotice', 'The cameras show current streams; the decision and command below come from the selected saved run. They are not synchronized. The stream provides no frame timestamp, so frame freshness cannot be verified.');
     text('connectionMode', 'LOCAL · LIVE CAMERA');
   };
 
@@ -41,7 +41,7 @@
       replacement.alt = s.img.alt;
       s.img.replaceWith(replacement);
       s.el.classList.remove('expanded');
-      s.empty.textContent = '저장된 이미지 없음';
+      s.empty.textContent = 'No saved image';
     }
     streams = [];
     $('disconnectLive').disabled = true;
@@ -49,9 +49,9 @@
     $('liveView').classList.remove('active');
     $('liveView').setAttribute('aria-pressed', 'false');
     text('connectionMode', 'LOCAL · OFFLINE');
-    text('observationLabel', '표시 중인 관측');
+    text('observationLabel', 'Displayed observation');
     text('viewNotice', snapshotNotice);
-    text('liveStatus', '연결 전');
+    text('liveStatus', 'Disconnected');
     if (state.view === 'live') state.view = 'before';
   }
   window.disconnectLiveCameras = disconnect;
@@ -65,9 +65,9 @@
       }
       if (s.seen && !s.failed) seen++;
       if (s.failed) failed++;
-      s.stamp.textContent = s.failed ? 'STREAM ERROR' : s.seen ? 'LIVE SOURCE · 프레임 수신됨' : 'LIVE SOURCE · 영상 대기';
+      s.stamp.textContent = s.failed ? 'STREAM ERROR' : s.seen ? 'LIVE SOURCE · frame received' : 'LIVE SOURCE · waiting for video';
     }
-    text('liveStatus', `프레임 수신 ${seen}/3${failed ? ` · 연결 오류 ${failed}` : ''}`);
+    text('liveStatus', `Frames received ${seen}/3${failed ? ` · stream errors ${failed}` : ''}`);
   }
 
   function connect(event) {
@@ -84,17 +84,17 @@
       const el = document.querySelector(`[data-camera="${camera}"]`);
       const old = el.querySelector('img');
       old.onload = null; old.onerror = null;
-      const img = document.createElement('img'); img.alt = `${camera} 실시간 영상`;
+      const img = document.createElement('img'); img.alt = `${camera} live video`;
       old.replaceWith(img);
       const stream = { el, img, empty: el.querySelector('.empty'), stamp: el.querySelector('.stamp'), seen: false, failed: false };
       streams.push(stream);
-      stream.empty.textContent = '영상 수신 대기'; stream.empty.hidden = false;
+      stream.empty.textContent = 'Waiting for video'; stream.empty.hidden = false;
       img.onload = refreshStatus;
       img.onerror = () => {
         stream.failed = true;
-        stream.empty.textContent = '영상 연결 실패'; stream.empty.hidden = false;
+        stream.empty.textContent = 'Video connection failed'; stream.empty.hidden = false;
         img.removeAttribute('src');
-        text('liveError', '브리지 주소·토픽·Raw/Compressed 방식을 확인하세요. 브라우저가 로컬 네트워크 접근 권한을 요청하면 허용한 뒤 다시 연결하세요.');
+        text('liveError', 'Check the bridge URL, camera topics, and Raw/Compressed transport. If your browser requests local network access, allow it and reconnect.');
         refreshStatus();
       };
       img.src = `${urls[i]}&t=${Date.now()}`;
