@@ -126,7 +126,12 @@ def build_tool_specs(cfg):
               'required': ['request_id', 'reason'], 'additionalProperties': False}),
         spec('robot_lift',
              'Move the lift joint to an absolute displacement in meters. 0 is the highest '
-             'position; negative values lower the body, arms and head together.',
+             'position; negative values lower the torso, which carries both arm bases and '
+             f'the head. The arm controller keeps each end effector at its last commanded '
+             f'{base} pose, so the arms re-bend to compensate and the hands stay where they '
+             'are; they may lag by about 1 cm while the lift is moving. Lowering the lift '
+             'moves the region the arms can reach downward, and raising it moves that region '
+             'upward. The head camera moves with the torso, so its view changes.',
              action_schema({'position_m': number('Absolute lift_joint in meters.', *lift)})),
     ]
 

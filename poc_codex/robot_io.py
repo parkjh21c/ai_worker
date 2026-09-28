@@ -17,7 +17,7 @@ from rclpy.executors import ExternalShutdownException, SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
-from rclpy.parameters import Parameter
+from rclpy.parameter import Parameter
 from sensor_msgs.msg import Image, JointState
 from tf2_ros import Buffer, TransformException, TransformListener
 
