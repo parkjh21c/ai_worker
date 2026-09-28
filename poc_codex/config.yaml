@@ -1,0 +1,116 @@
+# PoC settings for the FFW-SG2 Gazebo run.
+
+model:
+  id: gpt-6-astra
+  reasoning_effort: low
+
+  # USD per 1M tokens (public list price), for cost_usd_estimate in result.json
+  price_per_million: {input: 10.0, cached_input: 1.0, cache_write: 12.5, output: 50.0}
+
+
+codex:
+  bin: /usr/local/bin/codex
+  home: /root/.codex_poc
+  permission_profile: poc_run
+
+episode:
+  max_actions: 80
+  max_seconds: 1800
+
+  # Host ends the episode when the thread's totalTokens reaches this (token_limit); null = none
+  max_total_tokens: 5000000
+
+
+frames:
+  base: base_link
+  ee:
+    right: end_effector_r_link
+    left: end_effector_l_link
+
+cameras:
+  head: /zed/zed_node/rgb/image_rect_color
+  wrist_left: /camera_left/camera_left/color/image_rect_raw
+  wrist_right: /camera_right/camera_right/color/image_rect_raw
+
+cyclo:
+  x_offset_m: 0.0
+  goal_topic:
+    right: /r_goal_move
+    left: /l_goal_move
+  # Cyclo takes gripper commands on a separate topic and merges them into the arm trajectory.
+  gripper_topic:
+    right: /leader/joint_trajectory_command_broadcaster_right/raw_joint_trajectory
+    left: /leader/joint_trajectory_command_broadcaster_left/raw_joint_trajectory
+  gripper_joint:
+    right: gripper_r_joint1
+    left: gripper_l_joint1
+  move_time_s: 3.0
+
+# just recorded the reference poses
+# reference_pose:
+#   right: {x: 0.456, y: -0.200, z: 1.043, roll: -0.016, pitch: 0.001, yaw: 2.829}
+#   left: {x: 0.456, y: 0.200, z: 1.043, roll: 0.016, pitch: 0.001, yaw: -2.829}
+
+limits:
+  # Matching the reference setup
+  max_step_m: 0.05
+  max_rotation_rad: 0.35
+  # Joint limit is 1.1 rad but the fingertips overlap when closing on nothing.
+  gripper_rad: [0.0, 1.0]
+
+  head_joint1_rad: [-0.2317, 0.6951]
+  head_joint2_rad: [-0.35, 0.35]
+  lift_joint_m: [-0.5, 0.0]
+
+observation_guard:
+  max_age_s: 60.0
+  max_image_age_s: 1.0
+  max_state_lag_s: 1.0
+  max_future_stamp_s: 0.1
+
+  position_m: 0.01
+  orientation_deg: 5.0
+  gripper_rad: 0.03
+  head_rad: 0.03
+  lift_m: 0.01
+
+reach:
+  frame: arm_base_link
+  z_min: -0.80
+
+body_motion:
+  move_time_s: 3.0
+  head_topic: /leader/joystick_controller_left/joint_trajectory
+  lift_topic: /leader/joystick_controller_right/joint_trajectory
+
+tolerance:
+  position_m: 0.01
+  orientation_deg: 5
+  gripper_rad: 0.02   # Tolerance is for the gripper joint(+/-)
+  settle_s: 0.5       # Completion requires the state to remain
+  # Wall clock, not simulation time. Cyclo does not use sim time.
+  timeout_s: 15.0
+  # A move or gripper command ends when it comes to rest: it moved less than
+  # these for stall_s, judged no earlier than its trajectory time plus stall_s.
+  # At rest inside the tolerance above is arrived, outside is stopped.
+  stall_s: 1.0
+  stall_position_m: 0.002
+  stall_orientation_deg: 0.5
+  stall_gripper_rad: 0.005
+
+
+run:
+  output_root: runs
+  jpeg_quality: 95
+
+# Observation layer of poc_codex/robot_io.py. Wall clock seconds unless noted
+io:
+  ready_timeout_s: 30.0
+  lookup_timeout_s: 2.0
+  image_timeout_s: 5.0
+
+  # Each image/joint sample must be this close to the reference timestamp
+  snapshot_tolerance_s: 0.05
+
+  image_history: 90
+  joint_history: 300
