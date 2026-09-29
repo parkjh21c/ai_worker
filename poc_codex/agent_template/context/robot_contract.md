@@ -10,12 +10,14 @@
 ## Arms: `robot_move`
 
 - The target is an absolute pose for one arm (`right` or `left`). The other arm and both grippers stay as they are.
-- The hand moves on a straight line to the target.
+- Either arm can be used. The arms are controlled independently, one call at a time; nothing keeps the two hands in a fixed relation.
+- The hand moves on a straight line to the target. The arm controller tracks it within joint position and velocity limits and a self-collision margin; when a target would break them, the hand leaves the line or stops short, with nothing touched.
+- The controller avoids collisions only between parts of the robot, and not in every case. It does not know about the table or objects: a target inside them drives the hand into them.
 - The target may be at most **0.05 m** away from the current measured position and at most **0.35 rad** of rotation from the current measured orientation. Larger steps are rejected without moving.
 - A target lower than 0.8 m below the arm base is rejected. The arm base moves with the lift.
 - A move ends when the hand comes to rest: it moved less than 0.002 m and 0.5° for 1 s, judged after its 3 s trajectory. A move takes at least 4 s, and the new observation shows the hand at rest.
 - `arrived`: at rest within 0.01 m and 5° of the target. The packet gives the remaining error.
-- `stopped`: at rest farther from the target, for example against an object or the table. The action ran; the packet gives the remaining error and a new observation. The arm keeps pushing toward the target until the next move. A hand creeping very slowly, for example under a load, can also be reported as `stopped` and may still move a little afterwards.
+- `stopped`: at rest farther from the target, for example against an object or the table, at a joint limit, or where the self-collision margin blocks it, such as the two hands coming close. The action ran; the packet gives the remaining error and a new observation. The arm keeps pushing toward the target until the next move. A hand creeping very slowly, for example under a load, can also be reported as `stopped` and may still move a little afterwards.
 - If the host cannot confirm that the hand has come to rest within 15 s, the episode ends with a timeout. This does not cancel the controller command or prove that the robot stopped.
 
 ## Grippers: `robot_gripper`
@@ -37,7 +39,10 @@
 ## Lift: `robot_lift`
 
 - `position_m` is the lift joint displacement, range -0.5 to 0 m. 0 is the highest position.
-- Lowering moves the body, both arms and the head together, so the measured hand poses in `base_link` change too.
+- Raising or lowering moves the torso, which carries both arm bases and the head.
+- The arm controller keeps each hand near its last commanded `base_link` pose by re-bending the arms. The measured poses may lag by about 1 cm while the lift moves, or shift farther near a reach limit.
+- The region the arms can reach moves with the lift: lowering lets the hands reach lower (see the 0.8 m limit under Arms).
+- The head camera moves with the torso, so use a new image after a lift move instead of pixel positions from an earlier head image.
 
 ## Cameras
 
