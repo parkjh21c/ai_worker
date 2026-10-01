@@ -82,7 +82,7 @@ def error_kind(error):
 
 
 def render_codex_config(run_dir, codex_home, profile):
-    """CODEX_HOME/config.toml text: the SANDBOX.md permission profile for one run."""
+    """CODEX_HOME/config.toml text: permission profile for one run"""
     def quote(value):
         return json.dumps(str(value))  # JSON string escaping is valid TOML
     return '\n'.join([
@@ -590,7 +590,7 @@ class CodexHost:
         return outcome
 
     def _copy_session_log(self):
-        """Failed Codex tool calls may appear only in this log (see P0_STATUS.md)."""
+        """Failed Codex tool calls may appear only in this log"""
         sessions = Path(self.cfg.codex_home) / 'sessions'
         if not self.thread_id or not sessions.is_dir():
             return None

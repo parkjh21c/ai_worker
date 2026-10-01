@@ -27,7 +27,7 @@ class StallDetector:
         self.samples = deque()
 
     def update(self, now, stamp, value):
-        """Add one sample taken at monotonic time now; True when stalled."""
+        """Add one sample taken at monotonic time now; True when stalled"""
         self.samples.append((now, stamp, value))
         # Keep the newest sample that is at least window_s old as the window start.
         while len(self.samples) > 1 and now - self.samples[1][0] >= self.window_s:

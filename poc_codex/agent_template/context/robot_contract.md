@@ -59,7 +59,9 @@ They are not guaranteed to expose at exactly the same instant.
 ## Observation and request_id
 
 - Every observation has a `request_id`. An action must use the `request_id` of the latest observation; any other value is rejected (`stale_request_id`).
-- After an action runs, its packet has a new observation and a new `request_id`.
+- After an action completes and its post-observation succeeds, the same tool response contains a new observation and a new `request_id`; a separate `robot_observe` call is not needed.
+- If post-observation fails, the response has `observation: null` and status `arrived_without_observation` or `stopped_without_observation`. Call `robot_observe` before another action.
+- Submit the action target, `reason` (observed evidence and purpose), and latest `request_id` together. The response packet's `reason` describes the execution result. Robot tools run one at a time.
 - When an action is rejected for its arguments (`invalid_action`), nothing moved and the previous observation stays current. The packet has a new `request_id` for the corrected action.
 - An observation expires after `action_context.max_age_s` seconds (60). It is also rejected if the robot's state has changed since, for example a gripper holding an object that kept closing. Either way `movement_allowed` becomes false and you must call `robot_observe`.
 - `next_call` in each packet names the tool to call next.
@@ -68,7 +70,7 @@ They are not guaranteed to expose at exactly the same instant.
 
 | Field | Contents |
 |---|---|
-| `action_executed` | Whether a robot command ran |
+| `action_executed` | Whether a robot command was sent; this does not prove displacement or success |
 | `status` | `observed`, `arrived`, `stopped`, `arrived_without_observation`, `stopped_without_observation`, `rejected`, `observation_failed`, `completed` (after `task_complete`) |
 | `rejection`, `reason` | Why nothing ran, or details of the result |
 | `result` | Target, arrival and error; for a rejection, the requested values and the current position |

@@ -10,6 +10,7 @@ from transforms import quat_angle, rpy_to_quat, quat_to_rpy
 POSE_KEYS = ('x', 'y', 'z', 'roll', 'pitch', 'yaw')
 OBSERVATION_CAMERAS = ('head', 'wrist_left', 'wrist_right')
 
+
 def _finite_float(args, key):
     """Read one required argument as a finite float
 
@@ -22,12 +23,11 @@ def _finite_float(args, key):
 
     raw = args[key]
 
-    # bool is technically convertible to float, but it is not a valid
-    # coordinate or gripper command
+    # bool passes as a number in Python (True == 1) reject it explicitly
     if isinstance(raw, bool):
         return None, f'{key} is not a number ({raw!r})'
 
-    # Convert the required argument to float and catch invalid numeric input.
+    # Convert the required argument to float and catch invalid numeric input
     try:
         value = float(raw)
     except (TypeError, ValueError):

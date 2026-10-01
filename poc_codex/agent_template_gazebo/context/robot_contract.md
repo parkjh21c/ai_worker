@@ -16,7 +16,7 @@
 - A move ends when the hand comes to rest: it moved less than 0.002 m and 0.5° for 1 s, judged after its 3 s trajectory. A move takes at least 4 s, and the new observation shows the hand at rest.
 - `arrived`: at rest within 0.01 m and 5° of the target. The packet gives the remaining error.
 - `stopped`: at rest farther from the target, for example against an object or the table. The action ran; the packet gives the remaining error and a new observation. The arm keeps pushing toward the target until the next move. A hand creeping very slowly, for example under a load, can also be reported as `stopped` and may still move a little afterwards.
-- If the hand is still moving after 15 s, the episode ends.
+- If the host cannot confirm that the hand has come to rest within 15 s, the episode ends with a timeout. This does not cancel the controller command or prove that the robot stopped.
 
 ## Grippers: `robot_gripper`
 
@@ -25,7 +25,7 @@
 - `arrived`: at rest within 0.02 rad of the target.
 - `stopped`: at rest farther from the target, for example with the fingers on an object. The gripper keeps closing toward the target until the next gripper command.
 - Neither `arrived` nor `stopped` proves a grasp. Check the images.
-- If the gripper is still moving after 15 s, the episode ends.
+- If the host cannot confirm that the gripper has come to rest within 15 s, the episode ends with a timeout. This does not cancel the controller command or prove that the gripper stopped.
 - Observations report each gripper as `gripper` (0 to 1) and `gripper_rad`.
 
 ## Head: `robot_head`
@@ -37,7 +37,10 @@
 ## Lift: `robot_lift`
 
 - `position_m` is the lift joint displacement, range -0.5 to 0 m. 0 is the highest position.
-- Lowering moves the body, both arms and the head together, so the measured hand poses in `base_link` change too.
+- Raising or lowering moves the torso, which carries both arm bases and the head.
+- Cyclo tries to keep each hand near its last commanded `base_link` pose by re-bending the arms. Tracking error can occur during lift motion or near a reach limit.
+- The region the arms can reach moves with the lift (see the reach limit under Arms).
+- The head camera moves with the torso, so use a new image after a lift move instead of pixel positions from an earlier head image.
 
 ## Cameras
 
@@ -47,12 +50,14 @@
 | `wrist_left` | 424 × 240 | Left wrist |
 | `wrist_right` | 424 × 240 | Right wrist |
 
-All three images of an observation, and the state in its packet, are from the same moment in the simulation.
+The three images and robot state are matched within the configured simulation timestamp tolerance. They are not guaranteed to have exactly identical timestamps.
 
 ## Observation and request_id
 
 - Every observation has a `request_id`. An action must use the `request_id` of the latest observation; any other value is rejected (`stale_request_id`).
-- After an action runs, its packet has a new observation and a new `request_id`.
+- After an action completes and its post-observation succeeds, the same tool response contains a new observation and a new `request_id`; a separate `robot_observe` call is not needed.
+- If post-observation fails, the response has `observation: null` and status `arrived_without_observation` or `stopped_without_observation`. Call `robot_observe` before another action.
+- Submit the action target, `reason` (observed evidence and purpose), and latest `request_id` together. The response packet's `reason` describes the execution result. Robot tools run one at a time.
 - When an action is rejected for its arguments (`invalid_action`), nothing moved and the previous observation stays current. The packet has a new `request_id` for the corrected action.
 - An observation expires after `action_context.max_age_s` seconds (60). It is also rejected if the robot's state has changed since, for example a gripper holding an object that kept closing. Either way `movement_allowed` becomes false and you must call `robot_observe`.
 - `next_call` in each packet names the tool to call next.
@@ -61,7 +66,7 @@ All three images of an observation, and the state in its packet, are from the sa
 
 | Field | Contents |
 |---|---|
-| `action_executed` | Whether a robot command ran |
+| `action_executed` | Whether a robot command was sent; this does not prove displacement or success |
 | `status` | `observed`, `arrived`, `stopped`, `arrived_without_observation`, `stopped_without_observation`, `rejected`, `observation_failed`, `completed` (after `task_complete`) |
 | `rejection`, `reason` | Why nothing ran, or details of the result |
 | `result` | Target, arrival and error; for a rejection, the requested values and the current position |

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>poc_codex — Agent Control Loop</title><style>html,body{margin:0;background:white}main{max-width:1280px;margin:0 auto}svg{display:block;width:100%;height:auto}@media print{@page{size:landscape;margin:8mm}main{max-width:none}}</style></head><body><main><svg xmlns="http://www.w3.org/2000/svg" width="1280" height="980" viewBox="0 0 1280 980" role="img" aria-labelledby="title desc">
+<title id="title">poc_codex — Agent Control Loop</title>
+<desc id="desc">A task reaches the model through Codex app-server. The robot tool interface dispatches observation or action tools. Valid actions reach ROS 2 control and the robot. Synchronized state and images return to the model. The dashed boundary marks the AI Worker Container. Gazebo or the physical robot is outside that boundary. The loop ends on a completion claim or a host stop.</desc>
+<defs>
+ <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#234e79"/></marker>
+ <marker id="feedback-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#23766c"/></marker>
+ <style>
+ text {font-family: Arial, Helvetica, sans-serif; fill:#162c42}
+ .box {fill:#eeece2;stroke:#234e79;stroke-width:1.5}
+ .flow {fill:none;stroke:#234e79;stroke-width:1.6;marker-end:url(#arrow)}
+ .feedback {fill:none;stroke:#23766c;stroke-width:1.8;marker-end:url(#feedback-arrow)}
+ .label {font-size:14px;paint-order:stroke;stroke:white;stroke-width:5px;stroke-linejoin:round}
+ </style>
+</defs>
+<rect width="1280" height="980" fill="white"/>
+
+<rect x="120" y="207" width="990" height="573" rx="60" fill="none" stroke="#e68a2d" stroke-width="1.5" stroke-dasharray="7 5"/>
+<rect x="160" y="327" width="360" height="175" rx="13" fill="#edf5f7" stroke="#547da0" stroke-width="1.3" stroke-dasharray="5 4"/>
+<rect x="620" y="327" width="440" height="175" rx="13" fill="#fff7e7" stroke="#b49a62" stroke-width="1.3" stroke-dasharray="5 4"/>
+<ellipse class="box" cx="315.0" cy="37.0" rx="60.0" ry="23.0"/>
+<text x="315.0" y="44.0" text-anchor="middle" style="font-size:20px">Task</text>
+<rect class="box" x="190" y="91" width="250" height="80" rx="9"/>
+<text x="315.0" y="126.0" text-anchor="middle" style="font-size:21px">Model (Astra)</text>
+<text x="315.0" y="149.0" text-anchor="middle" style="font-size:14px">via Codex app-server</text>
+<ellipse class="box" cx="855.0" cy="131.0" rx="155.0" ry="40.0"/>
+<text x="855.0" y="126.0" text-anchor="middle" style="font-size:21px">Result</text>
+<text x="855.0" y="149.0" text-anchor="middle" style="font-size:14px">completion claim / host stop</text>
+<path class="flow" d="M315 60 V91"/>
+<path class="flow" d="M440 122 H700"/>
+<text x="570" y="111" text-anchor="middle" style="font-size:14px" class="label">task_complete</text>
+<path class="flow" d="M855 225 V171"/>
+<text x="869" y="198" text-anchor="start" style="font-size:13px" class="label">host limit / error</text>
+<path class="flow" d="M315 171 V225"/>
+<rect class="box" x="160" y="225" width="900" height="66" rx="9"/>
+<text x="610.0" y="253.0" text-anchor="middle" style="font-size:21px">Robot tool interface</text>
+<text x="610.0" y="276.0" text-anchor="middle" style="font-size:14px">CodexHost → RobotRollout → ObservationGuard / RobotTools</text>
+<path class="flow" d="M340 291 V327"/>
+<path class="flow" d="M840 291 V327"/>
+<text x="340" y="349" text-anchor="middle" style="font-size:16px;font-weight:bold">Observation tools</text>
+<text x="840" y="349" text-anchor="middle" style="font-size:16px;font-weight:bold">Action tools</text>
+<rect class="box" x="178" y="369" width="151" height="59" rx="9"/>
+<text x="253.5" y="405.5" text-anchor="middle" style="font-size:20px">robot_start</text>
+<rect class="box" x="350" y="369" width="151" height="59" rx="9"/>
+<text x="425.5" y="405.5" text-anchor="middle" style="font-size:20px">robot_observe</text>
+<text x="340" y="458" text-anchor="middle" style="font-size:15px">Initial or refreshed state + images</text>
+<text x="340" y="482" text-anchor="middle" style="font-size:13px;fill:#547080">No robot motion</text>
+<rect class="box" x="638" y="369" width="192" height="49" rx="9"/>
+<text x="734.0" y="400.5" text-anchor="middle" style="font-size:20px">robot_move</text>
+<rect class="box" x="849" y="369" width="193" height="49" rx="9"/>
+<text x="945.5" y="400.5" text-anchor="middle" style="font-size:20px">robot_gripper</text>
+<rect class="box" x="638" y="438" width="192" height="49" rx="9"/>
+<text x="734.0" y="469.5" text-anchor="middle" style="font-size:20px">robot_head</text>
+<rect class="box" x="849" y="438" width="193" height="49" rx="9"/>
+<text x="945.5" y="469.5" text-anchor="middle" style="font-size:20px">robot_lift</text>
+<path class="flow" d="M840 502 V546"/>
+<rect class="box" x="630" y="546" width="420" height="76" rx="9"/>
+<text x="840.0" y="579.0" text-anchor="middle" style="font-size:21px">Validation</text>
+<text x="840.0" y="602.0" text-anchor="middle" style="font-size:14px">request_id · freshness · state · motion limits</text>
+<path class="flow" d="M840 622 V670"/>
+<text x="854" y="650" text-anchor="start" style="font-size:14px" class="label">valid only</text>
+<rect class="box" x="630" y="670" width="420" height="80" rx="9"/>
+<text x="840.0" y="705.0" text-anchor="middle" style="font-size:21px">ROS 2 control</text>
+<text x="840.0" y="728.0" text-anchor="middle" style="font-size:14px">Cyclo: arm + gripper · Head/lift: trajectories</text>
+<path class="flow" d="M840 750 V802"/>
+<text x="854" y="770" text-anchor="start" style="font-size:14px" class="label">execute + wait</text>
+<rect class="box" x="630" y="802" width="420" height="62" rx="9"/>
+<text x="840.0" y="840.0" text-anchor="middle" style="font-size:20px">Gazebo / Physical robot</text>
+<path class="flow" d="M340 502 V688"/>
+<text x="353" y="651" text-anchor="start" style="font-size:14px" class="label">capture</text>
+<rect class="box" x="160" y="688" width="360" height="62" rx="9"/>
+<text x="340.0" y="714.0" text-anchor="middle" style="font-size:21px">Synchronized observation</text>
+<text x="340.0" y="737.0" text-anchor="middle" style="font-size:14px">3 RGB views · joint states · TF</text>
+<path class="feedback" d="M630 833 H570 V719 H520"/>
+<text x="575" y="853" text-anchor="middle" style="font-size:13px" class="label">feedback</text>
+<path class="feedback" d="M160 719 H65 V131 H190"/>
+<text x="48" y="525" text-anchor="middle" transform="rotate(-90 48 525)" style="font-size:16px;fill:#23766c">Tool reply: result + state / images + request_id</text>
+<text x="160" y="772" text-anchor="start" style="font-size:15px">AI Worker Container</text>
+<text x="120" y="934" text-anchor="start" style="font-size:14px;fill:#43556a">After each action: capture a new observation. Rejected action: return a tool reply without motion.</text>
+<text x="120" y="958" text-anchor="start" style="font-size:14px;fill:#43556a">robot_execute_plan: up to 5 sequential actions, with validation and observation after each step.</text>
+</svg>
+</main></body></html>

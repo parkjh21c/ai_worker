@@ -15,12 +15,12 @@ for viewing the exported HTML. It includes the selected run's records and JPEGs.
   the browser's local folder picker. Re-select it to load newer records. Folder
   loading does not modify the HTML or upload files; export again to make it portable.
 
-To export another run, from the repository root:
+To export another run, from the `ai_worker` Git repository root (use an existing run ID):
 
 ```bash
-python3 ai_worker/poc_codex/export_viewer.py \
-  ai_worker/poc_codex/runs/20260928_003947 \
-  --output ai_worker/poc_codex/run_viewer.html
+python3 poc_codex/export_viewer.py \
+  poc_codex/runs/20260928_003947 \
+  --output poc_codex/run_viewer.html
 ```
 
 The exporter uses only Python's standard library. The page template is
@@ -67,7 +67,7 @@ If you change those files, also update the fields in the viewer.
   path used by Cyclo's `ImageGridCell.js`. A trailing `/compressed` is removed
   from the base topic automatically. The compressed publisher must actually exist.
 
-The HTML is still opened directly; no page-hosting server is needed. The existing
+Live cameras can be used from a directly opened HTML file; follow mode still needs HTTP access to run records. The existing
 ROS `web_video_server` bridge must be running and able to receive the camera
 ROS topics. Cyclo's orchestrator bringup starts it on port 7085 by default. If
 Cyclo is not running, the equivalent camera-only bridge can be started from the

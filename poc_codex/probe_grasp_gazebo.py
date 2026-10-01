@@ -1,10 +1,11 @@
 """
-P4 grasp probe: move one hand by hand and close its gripper on an object.
+grasp probe: move one hand by hand and close its gripper on an object.
 
 Calls RobotTools directly: no guard, no Codex, no model. A timeout does not
 end anything here. Watch Gazebo while using it.
 
-    python3 probe_grasp.py [--arm right]
+    # In poc_codex/, with the ROS environment loaded.
+    python3 probe_grasp_gazebo.py [--arm right]
 
 Commands:
     s               show hand pose and gripper
@@ -68,7 +69,7 @@ def main():
     args = parser.parse_args()
 
     import rclpy
-    from ai_worker.poc_codex.robot_io_gazebo import RobotIO
+    from robot_io_gazebo import RobotIO
     from robot_tools import RobotTools
 
     with open(args.config, encoding='utf-8') as stream:

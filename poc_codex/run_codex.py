@@ -1,14 +1,14 @@
 """
-Run one poc_codex episode: Codex app-server as the policy, the robot behind
+Run one episode: Codex app-server as the policy, the robot behind
 dynamic tools, the model's task_complete claim judged later by a person.
 
 Run inside the ai_worker container, in a shell with the ROS environment loaded,
-while Gazebo and Cyclo are running:
+while the physical SG2 bringup and Cyclo are running:
     python3 run_codex.py
-    python3 run_codex.py --task "pick up the red block" --run-id first_try
+    python3 run_codex.py --task "your task" --run-id first_try
 
 The first Ctrl+C stops new actions and lets a running robot tool finish.
-The summary for judging is runs/<run_id>/result.json (ARCHITECTURE.md 12.4).
+The summary for judging is runs/<run_id>/result.json
 """
 
 import argparse
@@ -25,8 +25,7 @@ from workspace import build_instructions, prepare_workspace, write_run_record
 
 
 HERE = Path(__file__).resolve().parent
-DEFAULT_TASK = 'pick up the blue block'
-# End reasons where the host itself failed rather than the episode ending.
+# End reasons where the host itself failed rather than the episode ending
 HOST_FAILURES = frozenset({'host_error', 'transport_closed'})
 
 
@@ -46,7 +45,7 @@ def host_config(cfg, developer, prompt, **overrides):
 
 
 def estimate_cost(total, prices):
-    """USD estimate from tokenUsage.total; ignores the surcharge above 272k-token prompts."""
+    """USD estimate from tokenUsage.total; ignores any long-prompt surcharge"""
     if not total or not prices:
         return None
     cached = total.get('cachedInputTokens', 0)
@@ -59,7 +58,7 @@ def estimate_cost(total, prices):
 
 
 def summarize(record, outcome, cfg):
-    """result.json: what a person needs to judge the episode (ARCHITECTURE.md 12.4)."""
+    """result.json: what a person needs to judge the episode"""
     rollout = outcome.get('rollout') or {}
     total = (outcome.get('token_usage') or {}).get('total') or {}
     cached = total.get('cachedInputTokens', 0)
@@ -118,7 +117,7 @@ def run_episode(cfg, config_path, task, run_dir, guard,
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('--config', default=str(HERE / 'config.yaml'))
-    parser.add_argument('--task', default=DEFAULT_TASK)
+    parser.add_argument('--task', required=True)
     parser.add_argument('--run-id', default=None, help='folder name under runs/ (default: UTC time)')
     args = parser.parse_args()
 

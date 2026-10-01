@@ -1,4 +1,4 @@
-# PoC settings for the FFW-SG2 Gazebo run.
+# settings for the FFW-SG2 Gazebo run.
 
 model:
   id: gpt-6-astra
@@ -7,6 +7,8 @@ model:
   # USD per 1M tokens (public list price), for cost_usd_estimate in result.json
   price_per_million: {input: 10.0, cached_input: 1.0, cache_write: 12.5, output: 50.0}
 
+plan:
+  max_steps: 5
 
 codex:
   bin: /usr/local/bin/codex
@@ -19,7 +21,6 @@ episode:
 
   # Host ends the episode when the thread's totalTokens reaches this (token_limit); null = none
   max_total_tokens: 5000000
-
 
 frames:
   base: base_link
@@ -45,11 +46,6 @@ cyclo:
     right: gripper_r_joint1
     left: gripper_l_joint1
   move_time_s: 3.0
-
-# just recorded the reference poses
-# reference_pose:
-#   right: {x: 0.456, y: -0.200, z: 1.043, roll: -0.016, pitch: 0.001, yaw: 2.829}
-#   left: {x: 0.456, y: 0.200, z: 1.043, roll: 0.016, pitch: 0.001, yaw: -2.829}
 
 limits:
   # Matching the reference setup
@@ -93,12 +89,11 @@ tolerance:
   stall_orientation_deg: 0.5
   stall_gripper_rad: 0.005
 
-
 run:
   output_root: runs
   jpeg_quality: 95
 
-# Observation layer of poc_codex/robot_io.py. Wall clock seconds unless noted.
+# Observation layer of robot_io.py. Wall clock seconds unless noted.
 io:
   ready_timeout_s: 10.0       # wait_ready: cameras, gripper joints, /clock, both hand transforms
   lookup_timeout_s: 2.0       # get_ee_pose, get_gripper when nothing has arrived yet

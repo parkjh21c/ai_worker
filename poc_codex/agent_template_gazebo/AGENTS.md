@@ -16,16 +16,16 @@ Read `context/robot_contract.md` before your first action. It has the frame, uni
 | Tool | Arguments | Effect |
 |---|---|---|
 | `robot_start` | none | First observation. Only once per episode |
-| `robot_observe` | none | New observation. Nothing moves |
+| `robot_observe` | none | New observation. Sends no motion command |
 | `robot_move` | `request_id`, `reason`, `arm`, `x`, `y`, `z`, `roll`, `pitch`, `yaw` | Move one hand to an absolute pose |
 | `robot_gripper` | `request_id`, `reason`, `arm`, `value` | Open (0) or close (1) one gripper |
 | `robot_head` | `request_id`, `reason`, `head_joint1`, `head_joint2` | Point the head camera |
 | `robot_lift` | `request_id`, `reason`, `position_m` | Raise or lower the body |
 | `task_complete` | `request_id`, `reason` | Declare the task done. Ends the episode |
 
-- Call them inside `exec` as `tools.<name>(arguments)`. Each call waits until the robot has finished.
+- Call them inside `exec` as `tools.<name>(arguments)`. Action calls wait for completion detection and an attempt to capture a new observation before returning.
 - The result is one string. Line 1 is a JSON packet. If `packet.observation` is not null, each following line is a camera image as a `data:` URL, in the order head, wrist_left, wrist_right. Pass each `data:` line to `image()` to see it.
-- `action_executed` in the packet says whether the robot actually moved. When it is false, `status`, `rejection` and `reason` say why.
+- `action_executed` in the packet says whether a robot command was sent. When it is false, `status`, `rejection` and `reason` say why.
 - Every action needs `request_id` from the latest packet (`action_context.request_id`, also in `next_call`) and a `reason`.
 - Run one robot tool at a time.
 

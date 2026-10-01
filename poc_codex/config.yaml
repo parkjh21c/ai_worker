@@ -1,17 +1,18 @@
-# PoC settings for the FFW-SG2 Gazebo run.
-
 model:
   id: gpt-6-astra
+  # low, medium, high, xhigh, and max
   reasoning_effort: low
 
   # USD per 1M tokens (public list price), for cost_usd_estimate in result.json
   price_per_million: {input: 10.0, cached_input: 1.0, cache_write: 12.5, output: 50.0}
 
-
 codex:
   bin: /usr/local/bin/codex
   home: /root/.codex_poc
   permission_profile: poc_run
+
+plan:
+  max_steps: 5
 
 episode:
   max_actions: 80
@@ -19,7 +20,6 @@ episode:
 
   # Host ends the episode when the thread's totalTokens reaches this (token_limit); null = none
   max_total_tokens: 5000000
-
 
 frames:
   base: base_link
@@ -45,11 +45,6 @@ cyclo:
     right: gripper_r_joint1
     left: gripper_l_joint1
   move_time_s: 3.0
-
-# just recorded the reference poses
-# reference_pose:
-#   right: {x: 0.456, y: -0.200, z: 1.043, roll: -0.016, pitch: 0.001, yaw: 2.829}
-#   left: {x: 0.456, y: 0.200, z: 1.043, roll: 0.016, pitch: 0.001, yaw: -2.829}
 
 limits:
   # Matching the reference setup
@@ -88,7 +83,7 @@ tolerance:
   orientation_deg: 5
   gripper_rad: 0.02   # Tolerance is for the gripper joint(+/-)
   settle_s: 0.5       # Completion requires the state to remain
-  # Wall clock, not simulation time. Cyclo does not use sim time.
+  # Wall clock, not simulation time. Cyclo doesn't use sim time.
   timeout_s: 15.0
   # A move or gripper command ends when it comes to rest: it moved less than
   # these for stall_s, judged no earlier than its trajectory time plus stall_s.
@@ -98,12 +93,11 @@ tolerance:
   stall_orientation_deg: 0.5
   stall_gripper_rad: 0.005
 
-
 run:
   output_root: runs
   jpeg_quality: 95
 
-# Observation layer of poc_codex/robot_io.py. Wall clock seconds unless noted
+# Observation layer of robot_io.py. Wall clock seconds unless noted
 io:
   ready_timeout_s: 30.0
   lookup_timeout_s: 2.0

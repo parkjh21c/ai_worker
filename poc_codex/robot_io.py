@@ -23,12 +23,12 @@ from tf2_ros import Buffer, TransformException, TransformListener
 
 
 def stamp_seconds(stamp):
-    """builtin_interfaces/Time as float seconds."""
+    """builtin_interfaces/Time as float seconds"""
     return stamp.sec + stamp.nanosec * 1e-9
 
 
 class RobotIO(Node):
-    """Background observation of cameras, joints, TF and clock."""
+    """Background observation of cameras, joints, TF and clock"""
 
     def __init__(self, cfg):
         super().__init__(
@@ -48,14 +48,11 @@ class RobotIO(Node):
         self._image_history = int(io_cfg['image_history'])
         self._joint_history = int(io_cfg['joint_history'])
 
-        # Node already uses self._clock and similar names, so every cache here
-        # has its own prefix. Everything below the lock is written by the spin
-        # thread and read by callers.
+        # Callbacks write these caches; readers copy from them under the same lock
         self._cache_lock = threading.Lock()
         self._joint_cache = {}
         self._image_cache = {}
 
-        # Only the calling thread converts images, so one bridge is enough.
         self._bridge = CvBridge()
 
         # spin_thread=False: the TF subscriptions live on this node and are
@@ -71,8 +68,6 @@ class RobotIO(Node):
             self.create_subscription(
                 Image, topic, self._image_callback(camera), qos_profile_sensor_data)
 
-        # Cyclo receives MoveL goals and raw gripper trajectories.
-        # Final arm joint trajectories are still published by Cyclo
         self.pose_pub = {
             arm: self.create_publisher(MoveL, topic, 10)
             for arm, topic in cfg['cyclo']['goal_topic'].items()
@@ -256,7 +251,7 @@ class RobotIO(Node):
         return missing
 
     def wait_ready(self, timeout_s=None):
-        """Block until every camera, gripper joint, /clock and both hand transforms arrived once."""
+        """Wait for cameras, gripper/head/lift joint states and both hand transforms."""
         if timeout_s is None:
             timeout_s = self.ready_timeout_s
         deadline = time.monotonic() + timeout_s
@@ -564,13 +559,14 @@ class RobotIO(Node):
         return problem, None, None, None
     
     def get_snapshot(self, cameras, after_stamp_s=None, timeout_s=None):
-        """Camera frames and both arms' state that belong to one simulation time.
+        """Return camera frames and arm state from approximately the same time.
 
-        The frames pick the time: the newest stamp every listed camera has a frame
-        for (within snapshot_tolerance_s). Arm poses are TF at that stamp, gripper
-        values the /joint_states samples nearest to it.
-        after_stamp_s: accept only a time later than this, for example the moment
-        a move settled, so the snapshot cannot show the robot before it finished.
+        Choose the latest timestamp for which every requested camera has a frame
+        within snapshot_tolerance_s. Get arm poses from TF at that timestamp and
+        use the nearest /joint_states samples for the grippers.
+
+        If after_stamp_s is given, only accept a snapshot later than that time.
+        This can ensure the snapshot was taken after a movement finished.
         """
         cameras = list(cameras)
         unknown = [c for c in cameras if c not in self.cameras]

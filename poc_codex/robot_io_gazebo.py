@@ -43,9 +43,6 @@ class RobotIO(Node):
         self._image_history = int(io_cfg['image_history'])
         self._joint_history = int(io_cfg['joint_history'])
 
-        # Node already uses self._clock and similar names, so every cache here
-        # has its own prefix. Everything below the lock is written by the spin
-        # thread and read by callers.
         self._cache_lock = threading.Lock()
         self._joint_cache = {}
         self._image_cache = {}
@@ -69,8 +66,6 @@ class RobotIO(Node):
             self.create_subscription(
                 Image, topic, self._image_callback(camera), qos_profile_sensor_data)
 
-        # Cyclo receives MoveL goals and raw gripper trajectories.
-        # Final arm joint trajectories are still published by Cyclo
         self.pose_pub = {
             arm: self.create_publisher(MoveL, topic, 10)
             for arm, topic in cfg['cyclo']['goal_topic'].items()

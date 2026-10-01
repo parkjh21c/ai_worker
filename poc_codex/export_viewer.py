@@ -1,4 +1,5 @@
 """Export a run as a portable HTML file. Standard library only; no server needed."""
+
 import argparse
 import base64
 import json
@@ -8,7 +9,7 @@ HERE = Path(__file__).resolve().parent
 
 
 def collect_files(run_dir):
-    """Only include dashboard records and observation JPEGs, never session prompts."""
+    """Only include dashboard records and observation JPEGs, never session prompts"""
     paths = [run_dir / name for name in ('run.json', 'host_result.json', 'result.json',
                                          'public/history.jsonl')]
     for pattern in ('rollout/*.json', 'calls/*_request.json', 'public/observations/*/observation.json',

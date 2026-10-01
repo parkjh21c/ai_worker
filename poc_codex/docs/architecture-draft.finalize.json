@@ -1,0 +1,318 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "startedAt": "2026-10-01T04:54:58.699Z",
+  "specification": {
+    "path": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.json",
+    "sha256": "df636bc3d2d40955d0c3147bdc4c330eff8559a01d52a97b8f1fbed18f5033c5",
+    "bytes": 6274
+  },
+  "artifact": {
+    "path": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.html",
+    "sha256": "bdd466316e9abd1182eb054f662b94f3ec512fd7731bd7660058c1f19eafe853",
+    "bytes": 818744
+  },
+  "stages": {
+    "validate": {
+      "status": "fail",
+      "exitCode": 1,
+      "durationMs": null,
+      "command": [
+        "/home/robotis/.nvm/versions/node/v20.20.2/bin/node",
+        "/home/robotis/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "architecture",
+        "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.json",
+        "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.html",
+        "--quality",
+        "showcase",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "deliver",
+        "receiptId": "d608c41d-cb51-4023-a88c-1f384bb16c26",
+        "stage": "check",
+        "type": "architecture",
+        "input": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.json",
+        "output": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.html",
+        "error": "Final artifact check failed; the previous artifact was preserved.",
+        "diagnostics": [
+          {
+            "code": "composition/desktop-readability",
+            "severity": "error",
+            "message": "Final artifact failed composition/desktop-readability.",
+            "subject": {
+              "check": "composition"
+            },
+            "evidence": {
+              "owner": {
+                "kind": "edge",
+                "id": "task-input",
+                "from": "operator",
+                "to": "host"
+              },
+              "viewportWidth": 1440,
+              "viewportHeight": 900,
+              "availableDiagramWidth": 930,
+              "budgetBasis": "legacy-930",
+              "readerContract": "declared-wide-v1",
+              "requestedTargetPx": null,
+              "requestedTargetMet": null,
+              "budgetLimit": "legacy",
+              "viewBoxWidth": 1361.2,
+              "scale": 0.683220687628563,
+              "text": "--task",
+              "detail": "edge",
+              "sourceFontPx": 8,
+              "projectedFontPx": 5.465765501028504,
+              "minimumProjectedFontPx": 6
+            },
+            "supportedFixes": [
+              "Preserve the semantic text and any supplied coordinates, routes, sides, channels, and labels. Compactly reflow automatic spacing and empty corridors so the complete viewBox width is at most 1240px (current 1361.2px; 8px source text at 930px desktop budget). If supplied geometry fixes that width, use a renderer-supported semantic text-size setting or renderer-level fix instead. Position-only label controls cannot repair its projection."
+            ]
+          }
+        ],
+        "provenance": "failed",
+        "checker": {
+          "ok": false,
+          "file": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.html",
+          "artifact": {
+            "sha256": "fad4dd707560ccadf5f2f5efd2dcc8d576e818ed3976516b28853f8db8f80c16",
+            "bytes": 770185
+          },
+          "checks": [
+            {
+              "name": "single_svg",
+              "ok": true,
+              "details": [
+                "found 1 <svg> block(s)"
+              ]
+            },
+            {
+              "name": "finite_svg",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "orthogonal_arrows",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "label_route_clearance",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "relationship_crossings",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "relationship_corridors",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "container_border_runs",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "route_rhythm",
+              "ok": true,
+              "details": []
+            },
+            {
+              "name": "legend_clearance",
+              "ok": true,
+              "details": []
+            }
+          ],
+          "composition": {
+            "schemaVersion": 1,
+            "profile": "showcase",
+            "status": "fail",
+            "summary": {
+              "errors": 1,
+              "warnings": 0
+            },
+            "metrics": {
+              "properCrossings": 0,
+              "resolvedCrossovers": 0,
+              "ambiguousCorridors": 0,
+              "arrowheadCollisions": 0,
+              "containerBorderRuns": 0,
+              "labelRouteClearanceIssues": 0,
+              "labelCanvasOverflowIssues": 0,
+              "minLabelRouteClearance": 53.4,
+              "desktopReadabilityIssues": 1,
+              "viewportHeightIssues": 0,
+              "minProjectedNodeTextPx": 5.465765501028504,
+              "maxBends": 4,
+              "routesOverSuggestedBends": 1,
+              "maxStretch": 1.156,
+              "routesOverSuggestedStretch": 0,
+              "minSegmentPx": 16,
+              "minInteriorSegmentPx": 16,
+              "shortSegmentCount": 0,
+              "shortEndpointSegmentCount": 0,
+              "shortInteriorSegmentCount": 0,
+              "microSegmentCount": 0
+            },
+            "suggestedLimits": {
+              "bendsPerRelationship": 2,
+              "stretch": 1.35,
+              "segmentPx": 16,
+              "microSegmentPx": 8
+            },
+            "routeReview": {
+              "crossings": [],
+              "detours": [
+                {
+                  "relationship": {
+                    "id": "guard-dispatch",
+                    "from": "rollout",
+                    "to": "guard-tools",
+                    "label": "Validate &amp; execute",
+                    "collectionIndex": 3,
+                    "artifactIndex": 4
+                  },
+                  "bends": 4,
+                  "stretch": 1.156
+                }
+              ]
+            },
+            "leadingSpace": {
+              "measured": false,
+              "reviewSuggested": false
+            },
+            "desktopReadability": {
+              "budgetBasis": "legacy-930",
+              "readerContract": "declared-wide-v1",
+              "availableDiagramWidth": 930,
+              "actualBudgetPx": 930,
+              "limit": "legacy",
+              "requestedTargetPx": null,
+              "requestedTargetMet": null,
+              "hardFloorPx": 6,
+              "hardFloorMet": false,
+              "minimumOwner": {
+                "kind": "edge",
+                "id": "task-input",
+                "from": "operator",
+                "to": "host"
+              },
+              "minimumSourceTextPx": 8,
+              "minimumProjectedTextPx": 5.465765501028504,
+              "semanticTextCount": 32
+            },
+            "issues": [
+              {
+                "severity": "error",
+                "code": "composition/desktop-readability",
+                "owner": {
+                  "kind": "edge",
+                  "id": "task-input",
+                  "from": "operator",
+                  "to": "host"
+                },
+                "viewportWidth": 1440,
+                "viewportHeight": 900,
+                "availableDiagramWidth": 930,
+                "budgetBasis": "legacy-930",
+                "readerContract": "declared-wide-v1",
+                "requestedTargetPx": null,
+                "requestedTargetMet": null,
+                "budgetLimit": "legacy",
+                "viewBoxWidth": 1361.2,
+                "scale": 0.683220687628563,
+                "text": "--task",
+                "detail": "edge",
+                "sourceFontPx": 8,
+                "projectedFontPx": 5.465765501028504,
+                "minimumProjectedFontPx": 6
+              }
+            ]
+          }
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      },
+      "execution": "embedded-in-deliver"
+    },
+    "deliver": {
+      "status": "not-run",
+      "execution": "blocked-by-validate"
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "composition/desktop-readability",
+      "severity": "error",
+      "message": "Final artifact failed composition/desktop-readability.",
+      "subject": {
+        "check": "composition"
+      },
+      "evidence": {
+        "owner": {
+          "kind": "edge",
+          "id": "task-input",
+          "from": "operator",
+          "to": "host"
+        },
+        "viewportWidth": 1440,
+        "viewportHeight": 900,
+        "availableDiagramWidth": 930,
+        "budgetBasis": "legacy-930",
+        "readerContract": "declared-wide-v1",
+        "requestedTargetPx": null,
+        "requestedTargetMet": null,
+        "budgetLimit": "legacy",
+        "viewBoxWidth": 1361.2,
+        "scale": 0.683220687628563,
+        "text": "--task",
+        "detail": "edge",
+        "sourceFontPx": 8,
+        "projectedFontPx": 5.465765501028504,
+        "minimumProjectedFontPx": 6
+      },
+      "supportedFixes": [
+        "Preserve the semantic text and any supplied coordinates, routes, sides, channels, and labels. Compactly reflow automatic spacing and empty corridors so the complete viewBox width is at most 1240px (current 1361.2px; 8px source text at 930px desktop budget). If supplied geometry fixes that width, use a renderer-supported semantic text-size setting or renderer-level fix instead. Position-only label controls cannot repair its projection."
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.finalize.json",
+    "summaryReceipt": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.finalize-summary.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "validate",
+  "finishedAt": "2026-10-01T04:54:59.212Z",
+  "durationMs": 513,
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-01T04:54:58.761Z",
+    "source": "network",
+    "noticeRequired": false,
+    "noticeText": null
+  }
+}

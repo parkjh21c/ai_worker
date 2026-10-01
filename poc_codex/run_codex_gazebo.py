@@ -1,14 +1,14 @@
 """
-Run one poc_codex episode: Codex app-server as the policy, the robot behind
+Run one episode: Codex app-server as the policy, the robot behind
 dynamic tools, the model's task_complete claim judged later by a person.
 
 Run inside the ai_worker container, in a shell with the ROS environment loaded,
 while Gazebo and Cyclo are running:
-    python3 run_codex.py
-    python3 run_codex.py --task "pick up the red block" --run-id first_try
+    python3 run_codex_gazebo.py
+    python3 run_codex_gazebo.py --task "pick up the red block" --run-id first_try
 
 The first Ctrl+C stops new actions and lets a running robot tool finish.
-The summary for judging is runs/<run_id>/result.json (ARCHITECTURE.md 12.4).
+The summary for judging is runs/<run_id>/result.json
 """
 
 import argparse
@@ -31,7 +31,7 @@ HOST_FAILURES = frozenset({'host_error', 'transport_closed'})
 
 
 def host_config(cfg, developer, prompt, **overrides):
-    """HostConfig from config.yaml; overrides are for checks (poll_s and so on)."""
+    """HostConfig from config.yaml; overrides are for checks (poll_s and so on)"""
     return HostConfig(
         developer_instructions=developer,
         initial_prompt=prompt,
@@ -46,7 +46,7 @@ def host_config(cfg, developer, prompt, **overrides):
 
 
 def estimate_cost(total, prices):
-    """USD estimate from tokenUsage.total; ignores the surcharge above 272k-token prompts."""
+    """USD estimate from tokenUsage.total; ignores any long-prompt surcharge"""
     if not total or not prices:
         return None
     cached = total.get('cachedInputTokens', 0)
@@ -59,7 +59,7 @@ def estimate_cost(total, prices):
 
 
 def summarize(record, outcome, cfg):
-    """result.json: what a person needs to judge the episode (ARCHITECTURE.md 12.4)."""
+    """result.json: what a person needs to judge the episode"""
     rollout = outcome.get('rollout') or {}
     total = (outcome.get('token_usage') or {}).get('total') or {}
     cached = total.get('cachedInputTokens', 0)

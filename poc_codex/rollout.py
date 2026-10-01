@@ -13,8 +13,10 @@ import json
 from pathlib import Path
 import threading
 import time
+from functools import partial
 
 from codex_host import UncertainExecution, utc_now, write_json
+from plan_executor import PLAN_TOOL, build_plan_spec, execute_plan
 
 
 ACTION_TOOLS = {
@@ -30,8 +32,6 @@ ACTION_ARGUMENTS = {
     'robot_head': ('head_joint1', 'head_joint2'),
     'robot_lift': ('position_m',),
 }
-# Code mode returns a dynamic tool's content items to the model as one string;
-# the model forwards images only when the description tells it how (P0_STATUS.md).
 RETURN_FORMAT = (
     ' Returns a string. The first line is a JSON packet; action_executed says '
     'whether a robot command ran. If packet.observation is not null, each '
@@ -78,7 +78,7 @@ def build_tool_specs(cfg):
         return {'type': 'function', 'name': name, 'description': description + RETURN_FORMAT,
                 'inputSchema': schema}
 
-    return [
+    specs = [
         spec('robot_start',
              'Start the episode: capture the first synchronized observation of the three '
              'cameras and the robot state. Call once, before any other robot tool.',
@@ -135,6 +135,8 @@ def build_tool_specs(cfg):
              action_schema({'position_m': number('Absolute lift_joint in meters.', *lift)})),
     ]
 
+    return specs + [build_plan_spec(specs, cfg)]
+
 
 def rounded(value, digits=4):
     return round(float(value), digits)
@@ -171,7 +173,7 @@ class RobotRollout:
         self.finish_reason = None
         self.claim = None   # the model's task_complete call, judged later by a person
 
-    # Rollout interface (ARCHITECTURE.md 4.2) -----------------------------
+    # Rollout interface -----------------------------
 
     def tool_specs(self):
         return deepcopy(self.specs)
@@ -230,6 +232,8 @@ class RobotRollout:
             return self._observe(index, tool)
         if tool == 'task_complete':
             return self._complete(index, tool, arguments)
+        if tool == PLAN_TOOL:
+            return execute_plan(self, index, arguments)
         if tool in ACTION_TOOLS:
             return self._act(index, tool, arguments)
         return self._reject(index, tool, 'unknown_tool', f'Unknown robot tool {tool!r}.')
@@ -324,38 +328,57 @@ class RobotRollout:
 
     # Actions -------------------------------------------------------------
 
-    def _act(self, index, tool, arguments):
+    def _act(self, index, tool, arguments, *, internal=False, step_index=None):
+        reply = partial(self._reply, internal=internal)
+        reject = partial(self._reject, internal=internal)
+
         expected = {'request_id', 'reason', *ACTION_ARGUMENTS[tool]}
         missing = sorted(expected - set(arguments))
         extra = sorted(set(arguments) - expected)
         if missing or extra:
-            return self._reject(index, tool, 'invalid_arguments',
+            return reject(index, tool, 'invalid_arguments',
                                 f'Missing {missing}, unexpected {extra}.')
         if not isinstance(arguments['reason'], str) or not arguments['reason'].strip():
-            return self._reject(index, tool, 'invalid_arguments',
+            return reject(index, tool, 'invalid_arguments',
                                 'reason must describe the visible evidence and purpose.')
         with self.lock:
             context = dict(self.context or {})
-            if self.actions_executed >= self.max_actions:
+
+            if self.started_at is not None and self._seconds_remaining() <= 0:
+                self._finish('budget_seconds')
+
+            if self.finish_reason is not None:
+                blocked = (
+                    'episode_finished',
+                    f'Episode ended: {self.finish_reason}',
+                )
+            elif self.actions_executed >= self.max_actions:
                 self._finish('budget_actions')
-                blocked = ('budget_actions', 'The action budget is used up.')
+                blocked = (
+                    'budget_actions',
+                    'The action budget is used up.',
+                )
             elif not context.get('movement_allowed'):
-                blocked = ('observe_required',
-                           'No valid observation for movement. Call robot_observe.')
+                blocked = (
+                    'observe_required',
+                    'No valid observation for movement. Call robot_observe.',
+                )
             elif arguments['request_id'] != context.get('request_id'):
-                blocked = ('stale_request_id',
-                           'request_id does not match the latest observation; use '
-                           'action_context.request_id from the latest packet.')
+                blocked = (
+                    'stale_request_id',
+                    'request_id does not match the latest observation; use '
+                    'action_context.request_id from the latest packet.',
+                )
             else:
                 blocked = None
         if blocked:
-            return self._reject(index, tool, *blocked)
+            return reject(index, tool, *blocked)
 
         guard_args = {key: arguments[key] for key in ACTION_ARGUMENTS[tool]}
         guard_args.update(observation_id=context['observation_id'],
                           request_id=arguments['request_id'])
         result = self.guard.dispatch(ACTION_TOOLS[tool], guard_args)
-        self._record_private(index, tool, arguments, result)
+        self._record_private(index, tool, arguments, result, step_index=step_index)
         status = result.get('status')
         data = result.get('data') or {}
         sent = result.get('command_sent')
@@ -365,7 +388,7 @@ class RobotRollout:
                 # Argument validation (R2): nothing ran, the observation stays valid
                 with self.lock:
                     self.context = dict(data['action_context'])
-                return self._reply(
+                return reply(
                     index, tool, action_executed=False, status='rejected',
                     rejection='invalid_action', reason=result.get('reason'),
                     result={'requested': data.get('requested'),
@@ -376,7 +399,7 @@ class RobotRollout:
                 self.context = None
                 halted = data.get('run_halted')
             code = 'run_halted' if halted else 'observation_rejected'
-            return self._reject(index, tool, code, result.get('reason'))
+            return reject(index, tool, code, result.get('reason'))
 
         if status in ('arrived', 'stopped') and sent is True:
             # stopped: blocked short of the target and at rest; it ran and is measured
@@ -390,13 +413,13 @@ class RobotRollout:
                 # R4: the action finished but no new picture exists.
                 with self.lock:
                     self.context = None
-                return self._reply(
+                return reply(
                     index, tool, action_executed=True, status=f'{status}_without_observation',
                     reason=data.get('post_observation_error') or 'post-action observation missing',
                     result=action_result,
                     observation_note='No new observation. Call robot_observe before moving.')
             observation = self._save_observation(data['post_observation'], result['images'])
-            return self._reply(index, tool, action_executed=True, status=status,
+            return reply(index, tool, action_executed=True, status=status,
                                reason=result.get('reason'), result=action_result,
                                observation=observation, images=result['images'])
 
@@ -427,12 +450,12 @@ class RobotRollout:
 
     # Replies -------------------------------------------------------------
 
-    def _reject(self, index, tool, code, reason):
+    def _reject(self, index, tool, code, reason, *, internal=False):
         return self._reply(index, tool, action_executed=False, status='rejected',
-                           rejection=code, reason=reason)
+                           rejection=code, reason=reason, internal=internal)
 
     def _reply(self, index, tool, action_executed, status, reason, rejection=None,
-               result=None, observation=None, images=(), observation_note=None):
+               result=None, observation=None, images=(), observation_note=None, *, internal=False):
         """One JSON packet line, then one data: URL line per camera image."""
         with self.lock:
             if rejection is not None:
@@ -463,6 +486,11 @@ class RobotRollout:
                 'next_call': self._next_call(),
                 'history_path': str(self.history_path),
             }
+            if internal:
+                return {
+                    "packet": packet,
+                    "images": images,
+                }
             if index == 1 or (tool == 'robot_start' and observation is not None):
                 packet['task'] = self.task
                 packet['frame'] = self.cfg['frames']['base']
@@ -474,13 +502,39 @@ class RobotRollout:
             items.append({'type': 'inputImage', 'imageUrl': 'data:image/jpeg;base64,' + encoded})
         return {'success': True, 'contentItems': items}
 
-    def _record_private(self, index, tool, arguments, result):
-        """Full guard result without JPEG bytes, outside the model-readable area."""
-        record = {key: value for key, value in result.items() if key != 'images'}
-        record['images'] = [{key: value for key, value in image.items() if key != 'jpeg'}
-                            for image in result.get('images', [])]
-        write_json(self.private_dir / f'{index:04d}_{tool}.json',
-                   {'at': utc_now(), 'tool': tool, 'arguments': arguments, 'result': record})
+    def _record_private(
+        self, index, tool, arguments, result, *, step_index=None
+    ):
+        """Save a result without JPEG bytes."""
+        record = {
+            key: value
+            for key, value in result.items()
+            if key != 'images'
+        }
+        record['images'] = [
+            {
+                key: value
+                for key, value in image.items()
+                if key != 'jpeg'
+            }
+            for image in result.get('images', [])
+        ]
+
+        filename = (
+            f'{index:04d}_{tool}.json'
+            if step_index is None
+            else f'plan_{index:04d}_step_{step_index:02d}.json'
+        )
+
+        write_json(
+            self.private_dir / filename,
+            {
+                'at': utc_now(),
+                'tool': tool,
+                'arguments': arguments,
+                'result': record,
+            },
+        )
 
     # Internal state (call with the lock held) ----------------------------
 
@@ -498,6 +552,11 @@ class RobotRollout:
             return {'tool': 'robot_start'}
         context = self.context or {}
         if context.get('movement_allowed'):
-            return {'tool': 'robot_move | robot_gripper | robot_head | robot_lift',
-                    'request_id': context.get('request_id')}
+            return {
+                'tool': (
+                    'robot_move | robot_gripper | robot_head | '
+                    'robot_lift | robot_execute_plan'
+                ),
+                'request_id': context.get('request_id'),
+            }
         return {'tool': 'robot_observe'}

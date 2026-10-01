@@ -191,7 +191,7 @@ class ObservationGuard:
             self._invalidate()
             return self._reject(f'Pre-action check failed: {exc}. Call observe.')
 
-        # Claim the request before RobotTools can publish anything.
+        # Claim the request before RobotTools can publish anything
         self._used_requests.add(request_id)
         self._request_id = None
         clean_args = {key: value for key, value in args.items()
