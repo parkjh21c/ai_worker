@@ -15,6 +15,9 @@ services:
     environment:
      - DISPLAY=${DISPLAY}
      - QT_X11_NO_MITSHM=1
+     - NVIDIA_DRIVER_CAPABILITIES=all
+     - __NV_PRIME_RENDER_OFFLOAD=1
+     - __GLX_VENDOR_LIBRARY_NAME=nvidia
     volumes:
       - /dev:/dev
       - /dev/shm:/dev/shm
@@ -26,3 +29,4 @@ services:
       - ../:/root/ros2_ws/src/ai_worker/
       - /var/run/robotis/agent_sockets/ai_worker:/var/run/agent
     privileged: true
+    gpus: all
