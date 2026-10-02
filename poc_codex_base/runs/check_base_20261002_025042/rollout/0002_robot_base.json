@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-02T02:50:42.582225+00:00",
+  "tool": "robot_base",
+  "arguments": {
+    "request_id": "req_2ba7f0a97ca749eebac970636691dfbf",
+    "reason": "check #1",
+    "vx": 0.1,
+    "vy": 0.0,
+    "wz": 0.0,
+    "duration_s": 2.0
+  },
+  "result": {
+    "status": "rejected",
+    "reason": "base not ready: 1 other publisher(s) on /cmd_vel",
+    "command_sent": false,
+    "data": {
+      "requested": {
+        "vx": 0.1,
+        "vy": 0.0,
+        "wz": 0.0,
+        "duration_s": 2.0
+      },
+      "invalidate_observation": true,
+      "action_context": {
+        "movement_allowed": false,
+        "observation_id": null,
+        "request_id": null,
+        "max_age_s": 60.0,
+        "run_halted": false
+      },
+      "accepted_request": {
+        "observation_id": "obs_efdf469dc0454d4bbb4c69915fbcddf1",
+        "request_id": "req_2ba7f0a97ca749eebac970636691dfbf"
+      }
+    },
+    "images": []
+  }
+}

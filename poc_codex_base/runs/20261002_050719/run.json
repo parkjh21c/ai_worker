@@ -1,0 +1,28 @@
+{
+  "run_id": "20261002_050719",
+  "created_at": "2026-10-02T05:07:19.740435+00:00",
+  "task": "go to the red column",
+  "model": "gpt-6-astra",
+  "effort": "low",
+  "episode": {
+    "max_actions": 80,
+    "max_seconds": 1800,
+    "max_total_tokens": 5000000
+  },
+  "config_path": "/root/ros2_ws/src/ai_worker/poc_codex_base/config_gazebo.yaml",
+  "config_sha256": "5df4f796b6c5f6149108bb4f1d9b5a74a553ee040bb620c93e5fb88b660d9be3",
+  "agent_files_sha256": {
+    "AGENTS.md": "81b0654134a13a53ba84e9efa6eb7739fdb7742f270e32662a95f0de7cac195e",
+    "context/robot_contract.md": "4638c6a8f5f3d8a2b226e7df0160611077149a1ce16fdc21a6aa04fe0220e9a7",
+    "context/task_context.md": "31c8ec83b09321536843ed504deca0940527d0bce4fb1c05c81b40c936d246b9",
+    "notes/NOTES.md": "48ebe6afdfbe1332ecb915f4ef2edef3cafafbda4d28bc5407817118f4606199",
+    "workspace.json": "72f33acb8b33e43754b375a95130aa67fb7981e5a8a4190de0021e954382fd49"
+  },
+  "instructions": {
+    "loaded_by_codex": "agent/AGENTS.md",
+    "developer_instructions_source": "agent/context/task_context.md",
+    "developer_instructions_sha256": "31c8ec83b09321536843ed504deca0940527d0bce4fb1c05c81b40c936d246b9",
+    "initial_prompt": "Task: go to the red column\n\nThe episode has not started. Call robot_start.",
+    "initial_prompt_sha256": "239c13a24a814fe465018d60261d84bdf4c4b560737a2630b95a55ff77bedfe8"
+  }
+}

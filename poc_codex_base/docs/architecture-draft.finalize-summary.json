@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.json",
+    "sha256": "df636bc3d2d40955d0c3147bdc4c330eff8559a01d52a97b8f1fbed18f5033c5",
+    "bytes": 6274
+  },
+  "artifact": {
+    "path": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.html",
+    "sha256": "bdd466316e9abd1182eb054f662b94f3ec512fd7731bd7660058c1f19eafe853",
+    "bytes": 818744
+  },
+  "gates": {
+    "validate": "fail",
+    "deliver": "not-run",
+    "check": "not-run",
+    "browser-check": "not-run"
+  },
+  "failedStage": "validate",
+  "diagnostics": [
+    {
+      "code": "composition/desktop-readability",
+      "severity": "error",
+      "message": "Final artifact failed composition/desktop-readability.",
+      "subject": {
+        "check": "composition"
+      },
+      "evidence": {
+        "owner": {
+          "kind": "edge",
+          "id": "task-input",
+          "from": "operator",
+          "to": "host"
+        },
+        "viewportWidth": 1440,
+        "viewportHeight": 900,
+        "availableDiagramWidth": 930,
+        "budgetBasis": "legacy-930",
+        "readerContract": "declared-wide-v1",
+        "requestedTargetPx": null,
+        "requestedTargetMet": null,
+        "budgetLimit": "legacy",
+        "viewBoxWidth": 1361.2,
+        "scale": 0.683220687628563,
+        "text": "--task",
+        "detail": "edge",
+        "sourceFontPx": 8,
+        "projectedFontPx": 5.465765501028504,
+        "minimumProjectedFontPx": 6
+      },
+      "supportedFixes": [
+        "Preserve the semantic text and any supplied coordinates, routes, sides, channels, and labels. Compactly reflow automatic spacing and empty corridors so the complete viewBox width is at most 1240px (current 1361.2px; 8px source text at 930px desktop budget). If supplied geometry fixes that width, use a renderer-supported semantic text-size setting or renderer-level fix instead. Position-only label controls cannot repair its projection."
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 1,
+    "shown": 1,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.finalize.json",
+    "summaryReceipt": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.finalize-summary.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-01T04:54:58.761Z",
+    "source": "network",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 513,
+  "nextAction": {
+    "action": "edit-in-place",
+    "candidate": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.json",
+    "constraint": "Preserve all semantics and user-fixed geometry. Use references/architecture-layout-repair.md to choose a local repair or connected-scene reflow; edit the existing candidate.",
+    "then": "finalize-once"
+  }
+}

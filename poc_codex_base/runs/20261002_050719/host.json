@@ -1,0 +1,42 @@
+{
+  "started_at": "2026-10-02T05:07:21.151866+00:00",
+  "argv": [
+    "/usr/local/bin/codex",
+    "app-server",
+    "--stdio",
+    "--strict-config",
+    "--disable",
+    "browser_use",
+    "--disable",
+    "browser_use_external",
+    "--disable",
+    "computer_use",
+    "--disable",
+    "apps",
+    "--disable",
+    "image_generation",
+    "--disable",
+    "multi_agent",
+    "--disable",
+    "plugins"
+  ],
+  "server": "poc-codex-host/0.155.1 (Ubuntu 24.4.0; x86_64) unknown (poc-codex-host; 1)",
+  "thread_id": "01a0fb02-8073-7ef0-8a9e-d43e7f46fb3a",
+  "model": "gpt-6-astra",
+  "effort": "low",
+  "permission_profile": "poc_run",
+  "tools": [
+    "robot_start",
+    "robot_observe",
+    "robot_move",
+    "robot_gripper",
+    "robot_head",
+    "task_complete",
+    "robot_lift",
+    "robot_base",
+    "robot_execute_plan"
+  ],
+  "developer_instructions_sha256": "31c8ec83b09321536843ed504deca0940527d0bce4fb1c05c81b40c936d246b9",
+  "initial_prompt_sha256": "239c13a24a814fe465018d60261d84bdf4c4b560737a2630b95a55ff77bedfe8",
+  "codex_config_sha256": "a4986ad6ae89ce46823dfead977d80a5e2438d06c8db0fa09639844f0d3205d4"
+}

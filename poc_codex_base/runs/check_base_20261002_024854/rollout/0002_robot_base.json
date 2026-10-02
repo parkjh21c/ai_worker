@@ -1,0 +1,56 @@
+{
+  "at": "2026-10-02T02:48:55.933667+00:00",
+  "tool": "robot_base",
+  "arguments": {
+    "request_id": "req_75068f5c717c4c73ba3dba8f12932490",
+    "reason": "check #1",
+    "vx": -0.1,
+    "vy": 0.0,
+    "wz": 0.0,
+    "duration_s": 2.0
+  },
+  "result": {
+    "status": "timeout",
+    "reason": "base rest not confirmed: simulation clock stopped (paused?)",
+    "command_sent": true,
+    "data": {
+      "target": {
+        "vx": -0.1,
+        "vy": 0.0,
+        "wz": 0.0,
+        "duration_s": 2.0
+      },
+      "motion": {
+        "commanded": {
+          "vx": -0.1,
+          "vy": 0.0,
+          "wz": 0.0
+        },
+        "duration_s": 2.0,
+        "outcome": "stalled",
+        "detail": "0.007 m, 0.000 rad in 0.5 s",
+        "elapsed_s": 1.191096849999667,
+        "path_m": 0.04314701187497784,
+        "path_rad": 1.3149481503660354e-12,
+        "rest_confirmed": false,
+        "odom_measured": null
+      },
+      "arrival": {
+        "arrived": false,
+        "stopped": false
+      },
+      "action_context": {
+        "movement_allowed": false,
+        "observation_id": null,
+        "request_id": null,
+        "max_age_s": 60.0,
+        "run_halted": true
+      },
+      "accepted_request": {
+        "observation_id": "obs_01071a47407a4d0fb7e5f3d3e8fabc9e",
+        "request_id": "req_75068f5c717c4c73ba3dba8f12932490"
+      }
+    },
+    "images": []
+  }
+}

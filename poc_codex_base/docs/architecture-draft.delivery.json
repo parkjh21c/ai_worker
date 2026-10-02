@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "b9868fb2-ce22-462a-82c7-ab183a4b2ae3",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.json",
+  "output": "/home/robotis/ai_worker_poc/ai_worker/poc_codex/docs/architecture-draft.html",
+  "specification": {
+    "sha256": "55d008f252011ce2de841a820a00b5221e157ad71249f0372ef2b521e9b6aed0",
+    "bytes": 6338
+  },
+  "artifact": {
+    "sha256": "c6619b68140a5320520b1a0a0a098adad8eb3cdec9722c27863dc6bcfdcd2535",
+    "bytes": 770382
+  }
+}

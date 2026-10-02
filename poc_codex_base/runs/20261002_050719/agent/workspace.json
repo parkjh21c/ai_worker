@@ -1,0 +1,25 @@
+{
+  "python": "python3",
+  "run_dir": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719",
+  "agent_dir": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/agent",
+  "observations_dir": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/public/observations",
+  "observation_files": [
+    "head.jpg",
+    "wrist_left.jpg",
+    "wrist_right.jpg",
+    "observation.json"
+  ],
+  "history_path": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/public/history.jsonl",
+  "notes_path": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/agent/notes/NOTES.md",
+  "scratch_dir": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/agent/scratch",
+  "robot_contract": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/agent/context/robot_contract.md",
+  "task_context": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/agent/context/task_context.md",
+  "readable": [
+    "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/public",
+    "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/agent"
+  ],
+  "writable": [
+    "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/agent/notes",
+    "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/agent/scratch"
+  ]
+}

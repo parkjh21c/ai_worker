@@ -1,0 +1,42 @@
+{
+  "finished_at": "2026-10-02T05:10:24.456111+00:00",
+  "elapsed_s": 184.7,
+  "end_reason": "uncertain_execution",
+  "end_detail": "UncertainExecution: robot_base: status=error command_sent=True reason=base motion ended with clock_stopped: simulation clock stopped (paused?)",
+  "thread_id": "01a0fb02-8073-7ef0-8a9e-d43e7f46fb3a",
+  "server": "poc-codex-host/0.155.1 (Ubuntu 24.4.0; x86_64) unknown (poc-codex-host; 1)",
+  "turns": 1,
+  "continuations": 0,
+  "network_continues": 0,
+  "tool_calls": 21,
+  "token_usage": {
+    "total": {
+      "totalTokens": 633265,
+      "inputTokens": 629975,
+      "cachedInputTokens": 590993,
+      "cacheWriteInputTokens": 38919,
+      "outputTokens": 3290,
+      "reasoningOutputTokens": 183
+    },
+    "last": {
+      "totalTokens": 39218,
+      "inputTokens": 38922,
+      "cachedInputTokens": 38156,
+      "cacheWriteInputTokens": 763,
+      "outputTokens": 296,
+      "reasoningOutputTokens": 20
+    },
+    "modelContextWindow": 258400
+  },
+  "session_log": "/root/ros2_ws/src/ai_worker/poc_codex_base/runs/20261002_050719/codex_session.jsonl",
+  "errors": [],
+  "rollout": {
+    "finish_reason": "uncertain_execution",
+    "claim": null,
+    "actions_executed": 19,
+    "observations": 20,
+    "tool_calls": 21,
+    "rejections": {},
+    "elapsed_s": 177.4
+  }
+}

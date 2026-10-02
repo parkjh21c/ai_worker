@@ -1,0 +1,306 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "poc_codex System Architecture · Draft",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1240,
+      730
+    ],
+    "locale": "en",
+    "output": "ai_worker/poc_codex/docs/architecture-draft.html"
+  },
+  "components": [
+    {
+      "id": "operator",
+      "type": "external",
+      "label": "User",
+      "sublabel": "Natural-language task",
+      "pos": [
+        22.14,
+        246.0
+      ],
+      "size": [
+        118.08,
+        73.8
+      ]
+    },
+    {
+      "id": "policy",
+      "type": "cloud",
+      "label": "Codex app-server",
+      "sublabel": "Model reasoning · Tool selection",
+      "pos": [
+        214.02,
+        65.6
+      ],
+      "size": [
+        191.88,
+        82.0
+      ]
+    },
+    {
+      "id": "host",
+      "type": "backend",
+      "label": "Entry Point / Host",
+      "sublabel": "run_codex.py · codex_host.py",
+      "tag": "transport.py · Serial tool execution",
+      "pos": [
+        214.02,
+        246.0
+      ],
+      "size": [
+        191.88,
+        90.2
+      ]
+    },
+    {
+      "id": "rollout",
+      "type": "backend",
+      "label": "RobotRollout",
+      "sublabel": "rollout.py · plan_executor.py",
+      "tag": "Observation replies · Sequential plans",
+      "pos": [
+        457.56,
+        246.0
+      ],
+      "size": [
+        191.88,
+        90.2
+      ]
+    },
+    {
+      "id": "guard-tools",
+      "type": "security",
+      "label": "Observation Guard / RobotTools",
+      "sublabel": "observation_guard.py · robot_tools.py",
+      "tag": "request_id · State and motion checks",
+      "pos": [
+        457.56,
+        533.0
+      ],
+      "size": [
+        206.64,
+        90.2
+      ]
+    },
+    {
+      "id": "ros-io",
+      "type": "messagebus",
+      "label": "RobotIO · ROS 2",
+      "sublabel": "robot_io.py · transforms.py · stall.py",
+      "tag": "Commands · Arrival checks · Synced observations",
+      "pos": [
+        715.86,
+        533.0
+      ],
+      "size": [
+        206.64,
+        90.2
+      ]
+    },
+    {
+      "id": "cyclo",
+      "type": "backend",
+      "label": "Cyclo MoveL",
+      "sublabel": "Arm goals · Gripper commands",
+      "tag": "External dependency · Arm trajectories",
+      "pos": [
+        723.24,
+        246.0
+      ],
+      "size": [
+        191.88,
+        90.2
+      ]
+    },
+    {
+      "id": "controllers",
+      "type": "backend",
+      "label": "controller manager",
+      "sublabel": "arm_l / arm_r · head · lift",
+      "tag": "100 Hz · SG2 joint control",
+      "pos": [
+        1011.0600000000001,
+        246.0
+      ],
+      "size": [
+        191.88,
+        90.2
+      ]
+    },
+    {
+      "id": "feedback",
+      "type": "frontend",
+      "label": "Cameras / Robot State",
+      "sublabel": "ZED head · RealSense wrists",
+      "tag": "3 RGB views · /joint_states · /tf",
+      "pos": [
+        1011.0600000000001,
+        533.0
+      ],
+      "size": [
+        191.88,
+        90.2
+      ]
+    },
+    {
+      "id": "artifacts",
+      "type": "database",
+      "label": "Run Logs / Viewer",
+      "sublabel": "runs/<run_id>/ · export_viewer.py",
+      "tag": "result.json · Observation images · rollout",
+      "pos": [
+        214.02,
+        533.0
+      ],
+      "size": [
+        191.88,
+        90.2
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "User PC / ai_worker Runtime · poc_codex + External Cyclo",
+      "wraps": [
+        "policy",
+        "host",
+        "rollout",
+        "guard-tools",
+        "ros-io",
+        "cyclo",
+        "artifacts"
+      ],
+      "pad": 24
+    },
+    {
+      "kind": "region",
+      "label": "AI Worker · SG2 Robot",
+      "wraps": [
+        "controllers",
+        "feedback"
+      ],
+      "pad": 24
+    }
+  ],
+  "connections": [
+    {
+      "id": "task-input",
+      "from": "operator",
+      "to": "host",
+      "label": "--task",
+      "variant": "emphasis"
+    },
+    {
+      "id": "policy-rpc",
+      "from": "policy",
+      "to": "host",
+      "label": "JSON-RPC / stdio",
+      "variant": "emphasis",
+      "labelAt": [
+        309.96,
+        192.7
+      ]
+    },
+    {
+      "id": "serve-tools",
+      "from": "host",
+      "to": "rollout",
+      "label": "Tool call",
+      "variant": "emphasis"
+    },
+    {
+      "id": "guard-dispatch",
+      "from": "rollout",
+      "to": "guard-tools",
+      "label": "Validate & execute",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "io-dispatch",
+      "from": "guard-tools",
+      "to": "ros-io",
+      "label": "ROS I/O",
+      "variant": "emphasis"
+    },
+    {
+      "id": "arm-command",
+      "from": "ros-io",
+      "to": "cyclo",
+      "label": "MoveL / Gripper trajectory",
+      "variant": "emphasis",
+      "labelAt": [
+        819.1800000000001,
+        385.4
+      ],
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "arm-output",
+      "from": "cyclo",
+      "to": "controllers",
+      "label": "Arm trajectories",
+      "variant": "emphasis"
+    },
+    {
+      "id": "body-command",
+      "from": "ros-io",
+      "to": "controllers",
+      "label": "Head / lift trajectories",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "via": [
+        [
+          819.1800000000001,
+          442.8
+        ],
+        [
+          1107.0,
+          442.8
+        ]
+      ]
+    },
+    {
+      "id": "observation-input",
+      "from": "feedback",
+      "to": "ros-io",
+      "label": "RGB · State",
+      "variant": "dashed"
+    },
+    {
+      "id": "save-run",
+      "from": "host",
+      "to": "artifacts",
+      "label": "Run logs",
+      "variant": "dashed",
+      "labelAt": [
+        309.96,
+        434.6
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Observe → Reason → Act → Observe",
+      "items": [
+        "Tool reply: result + 3 RGB views + state + new request_id",
+        "Replies follow the call path back · Plans run up to 5 steps sequentially"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Draft Scope",
+      "items": [
+        "Logical runtime boundaries; physical PC/container placement needs confirmation",
+        "Gazebo: dedicated entry point, I/O, observation guard, and /clock"
+      ]
+    }
+  ]
+}

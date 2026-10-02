@@ -1,0 +1,11 @@
+{
+  "index": 0,
+  "call_id": "exec-9057afd0-4a39-42c2-b880-2932f6a9468a",
+  "thread_id": "01a0fb02-8073-7ef0-8a9e-d43e7f46fb3a",
+  "turn_id": "01a0fb02-83c6-7940-8337-b09d540bcaab",
+  "tool": "robot_start",
+  "arguments": {},
+  "digest": "d6cdd7051b22245a00369503b3b7ed775545e3a267aa9c6af1017649383af883",
+  "status": "running",
+  "started_at": "2026-10-02T05:07:27.034000+00:00"
+}

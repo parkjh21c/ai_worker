@@ -1,0 +1,56 @@
+{
+  "at": "2026-10-02T05:10:23.265019+00:00",
+  "tool": "robot_base",
+  "arguments": {
+    "request_id": "req_444e621adfcd416cab694d908d1b3478",
+    "vx": 0.1,
+    "vy": 0,
+    "wz": 0,
+    "duration_s": 2,
+    "reason": "Downward image shows clear floor to column foot; scale change suggests over a meter to column, allowing another short approach step."
+  },
+  "result": {
+    "status": "error",
+    "reason": "base motion ended with clock_stopped: simulation clock stopped (paused?)",
+    "command_sent": true,
+    "data": {
+      "target": {
+        "vx": 0.1,
+        "vy": 0.0,
+        "wz": 0.0,
+        "duration_s": 2.0
+      },
+      "motion": {
+        "commanded": {
+          "vx": 0.1,
+          "vy": 0.0,
+          "wz": 0.0
+        },
+        "duration_s": 2.0,
+        "outcome": "clock_stopped",
+        "detail": "simulation clock stopped (paused?)",
+        "elapsed_s": 0.8406591929997376,
+        "path_m": 0.01815380949505936,
+        "path_rad": 2.7686741788102154e-12,
+        "rest_confirmed": false,
+        "odom_measured": null
+      },
+      "arrival": {
+        "arrived": false,
+        "stopped": false
+      },
+      "action_context": {
+        "movement_allowed": false,
+        "observation_id": null,
+        "request_id": null,
+        "max_age_s": 60.0,
+        "run_halted": true
+      },
+      "accepted_request": {
+        "observation_id": "obs_12ba9e2319fb4436b535288be1b75d17",
+        "request_id": "req_444e621adfcd416cab694d908d1b3478"
+      }
+    },
+    "images": []
+  }
+}

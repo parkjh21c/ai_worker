@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-02T02:46:12.437169+00:00",
+  "tool": "robot_base",
+  "arguments": {
+    "request_id": "req_61db69cc69d54ff797992c0ca930e802",
+    "reason": "check #1",
+    "vx": 0.05,
+    "vy": 0.0,
+    "wz": 0.0,
+    "duration_s": 1.0
+  },
+  "result": {
+    "status": "rejected",
+    "reason": "vx=0.05 is below the controller deadband 0.1 m/s; use 0 or at least 0.1",
+    "command_sent": false,
+    "data": {
+      "requested": {
+        "vx": 0.05,
+        "vy": 0.0,
+        "wz": 0.0,
+        "duration_s": 1.0
+      },
+      "invalidate_observation": false,
+      "action_context": {
+        "movement_allowed": true,
+        "observation_id": "obs_4dff701984104a47b6180a7c7e07cea5",
+        "request_id": "req_d22da600a2984d4a85ae45938f6b3d83",
+        "max_age_s": 60.0,
+        "run_halted": false
+      },
+      "accepted_request": {
+        "observation_id": "obs_4dff701984104a47b6180a7c7e07cea5",
+        "request_id": "req_61db69cc69d54ff797992c0ca930e802"
+      }
+    },
+    "images": []
+  }
+}

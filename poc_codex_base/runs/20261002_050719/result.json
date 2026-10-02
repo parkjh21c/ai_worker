@@ -1,0 +1,28 @@
+{
+  "run_id": "20261002_050719",
+  "task": "go to the red column",
+  "model": "gpt-6-astra",
+  "effort": "low",
+  "end_reason": "uncertain_execution",
+  "end_detail": "UncertainExecution: robot_base: status=error command_sent=True reason=base motion ended with clock_stopped: simulation clock stopped (paused?)",
+  "finish_reason": "uncertain_execution",
+  "claim": null,
+  "actions_executed": 19,
+  "observations": 20,
+  "robot_tool_calls": 21,
+  "rejections": {},
+  "turns": 1,
+  "continuations": 0,
+  "elapsed_s": 184.7,
+  "tokens": {
+    "total": 633265,
+    "uncached_input": 63,
+    "cached_input": 590993,
+    "cache_write": 38919,
+    "output": 3290,
+    "reasoning": 183
+  },
+  "cost_usd_estimate": 1.243,
+  "verdict": null,
+  "verdict_note": null
+}

@@ -1,0 +1,15 @@
+{
+  "index": 20,
+  "call_id": "exec-2a0a2073-bdda-4811-9843-46a138b5510b",
+  "status": "uncertain",
+  "finished_at": "2026-10-02T05:10:24.423358+00:00",
+  "reply": {
+    "success": false,
+    "contentItems": [
+      {
+        "type": "inputText",
+        "text": "Execution state of robot_base is uncertain; movement is blocked for this episode."
+      }
+    ]
+  }
+}
