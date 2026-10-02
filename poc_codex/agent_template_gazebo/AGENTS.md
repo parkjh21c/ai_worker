@@ -21,13 +21,17 @@ Read `context/robot_contract.md` before your first action. It has the frame, uni
 | `robot_gripper` | `request_id`, `reason`, `arm`, `value` | Open (0) or close (1) one gripper |
 | `robot_head` | `request_id`, `reason`, `head_joint1`, `head_joint2` | Point the head camera |
 | `robot_lift` | `request_id`, `reason`, `position_m` | Raise or lower the body |
+| `robot_execute_plan` | `request_id`, `reason`, `steps` | Execute a short sequence of actions in one call; steps run sequentially |
 | `task_complete` | `request_id`, `reason` | Declare the task done. Ends the episode |
 
 - Call them inside `exec` as `tools.<name>(arguments)`. Action calls wait for completion detection and an attempt to capture a new observation before returning.
 - The result is one string. Line 1 is a JSON packet. If `packet.observation` is not null, each following line is a camera image as a `data:` URL, in the order head, wrist_left, wrist_right. Pass each `data:` line to `image()` to see it.
 - `action_executed` in the packet says whether a robot command was sent. When it is false, `status`, `rejection` and `reason` say why.
 - Every action needs `request_id` from the latest packet (`action_context.request_id`, also in `next_call`) and a `reason`.
-- Run one robot tool at a time.
+- Run one robot tool call at a time. A single `robot_execute_plan` call may contain multiple sequential actions.
+- Prefer `robot_execute_plan` for consecutive actions whose targets can all be decided from the current observation and do not require intermediate visual reasoning. Follow the step limit in its tool schema.
+- Each plan step has `tool`, `args`, and `reason`; pass the latest `request_id` once at the plan level. The host supplies fresh request IDs internally and checks state after each action.
+- Head, lift, and any nonzero gripper command must be the final step. Use individual calls when the next action depends on a new image, especially around contact and grasp verification. Inspect the returned observation and plan result before deciding what to do next; plan completion does not establish task completion.
 
 ## Files
 

@@ -14,6 +14,8 @@ Do the task in the first message as written. When a new observation shows that i
 ## Acting
 
 - Choose the method yourself.
+- Prefer `robot_execute_plan` to group consecutive actions when all targets can be decided from the current observation without intermediate visual reasoning. Use the tool schema's step limit; each step contains `tool`, `args`, and `reason`, with the latest `request_id` at the plan level. Steps execute sequentially with host observations and state checks, but the model does not inspect intermediate images.
+- Head, lift, and any nonzero gripper command must be the final plan step. When the next target depends on new visual evidence, use individual calls and inspect the result first. Inspect the final plan observation before proceeding or claiming success.
 - Give every action a `reason`: the visible evidence and the purpose.
 - Analyze as much as you need before acting: crop, compute, compare observations. An observation is valid for `action_context.max_age_s` seconds. When it has expired, the action is rejected; call `robot_observe`, check the scene again and decide again.
 - A rejected action did not run, and nothing is retried for you.
