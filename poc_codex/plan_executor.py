@@ -132,6 +132,7 @@ def execute_plan(rollout, index, arguments):
     journal = rollout.private_dir / f'plan_{index:04d}_state.json'
     last = None
     images = ()
+    seen = None     # last step packet that returned an observation, and its images
     any_sent = False
     status = 'plan_interrupted'
 
@@ -168,6 +169,8 @@ def execute_plan(rollout, index, arguments):
             raise UncertainExecution(summary['stop_reason']) from exc
 
         last, images = response['packet'], response['images']
+        if last['observation'] is not None:
+            seen = (last, images)
         any_sent = any_sent or last['action_executed']
         summary['steps'].append({
             'step_index': step_index, 'tool': step['tool'],
@@ -194,10 +197,16 @@ def execute_plan(rollout, index, arguments):
         'status': status, 'reason': reason, 'command_sent': any_sent,
         'data': summary, 'images': [],
     })
+    observation = last['observation'] if last else None
+    note = last.get('observation_note') if last else None
+    if (observation is None and seen is not None
+            and last['action_context']['movement_allowed']):
+        # A rejected step ran nothing; the earlier step's observation is still current.
+        observation, images = seen[0]['observation'], seen[1]
+        note = (f'Step {len(summary["steps"])} was rejected without running; this is the '
+                'observation after the last step that ran, and it is still current.')
     return rollout._reply(
         index, PLAN_TOOL, action_executed=any_sent,
         status=status, reason=reason, result=summary,
-        observation=last['observation'] if last else None,
-        observation_note=last.get('observation_note') if last else None,
-        images=images,
+        observation=observation, observation_note=note, images=images,
     )
