@@ -13,7 +13,7 @@
 - Either arm can be used. The arms are controlled independently, one call at a time; nothing keeps the two hands in a fixed relation.
 - The hand moves on a straight line to the target. The arm controller tracks it within joint position and velocity limits and a self-collision margin; when a target would break them, the hand leaves the line or stops short, with nothing touched.
 - The controller avoids collisions only between parts of the robot, and not in every case. It does not know about the table or objects: a target inside them drives the hand into them.
-- The target may be at most **0.05 m** away from the current measured position and at most **0.35 rad** of rotation from the current measured orientation. Larger steps are rejected without moving.
+- The target may be at most **0.15 m** away from the current measured position and at most **0.35 rad** of rotation from the current measured orientation. Larger steps are rejected without moving.
 - A target lower than 0.8 m below the arm base is rejected. The arm base moves with the lift.
 - A move ends when the hand comes to rest: it moved less than 0.002 m and 0.5° for 1 s, judged after its 3 s trajectory. A move takes at least 4 s, and the new observation shows the hand at rest.
 - `arrived`: at rest within 0.01 m and 5° of the target. The packet gives the remaining error.

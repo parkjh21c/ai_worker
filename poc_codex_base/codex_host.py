@@ -103,6 +103,7 @@ def render_codex_config(run_dir, codex_home, profile):
         '":root" = "deny"',
         '":minimal" = "read"',
         f'{quote(Path(codex_home) / "packages")} = "read"',
+        '"/root/.codex_poc/packages/standalone/releases/0.158.0-aarch64-unknown-linux-musl" = "read"',
         '',
         f'[permissions.{profile}.filesystem.{quote(Path(run_dir).resolve())}]',
         '"public" = "read"',

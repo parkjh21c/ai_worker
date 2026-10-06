@@ -764,7 +764,7 @@ class RobotIO(Node):
         return Duration(sec=sec, nanosec=nanosec)
 
     def send_pose(self, arm, target, move_time_s=None):
-        """Publish a MoveL goal expressed in real SG2 base_link coordinates"""
+        """Publish a MoveL goal expressed in SG2 base_link coordinates"""
         if move_time_s is None:
             move_time_s = self.cfg['cyclo']['move_time_s']
 

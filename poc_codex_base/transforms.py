@@ -1,6 +1,5 @@
 """Rotation and angle helpers shared by robot_io and robot_tools.
 
-Pure math, no ROS or model SDK imports.
 Angles are radians in the tf2 convention R = Rz(yaw) * Ry(pitch) * Rx(roll).
 Quaternions are (x, y, z, w).
 """
