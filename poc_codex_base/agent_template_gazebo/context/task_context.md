@@ -20,6 +20,24 @@ Do the task in the first message as written. When a new observation shows that i
 - The host's pre-action check compares only the robot's own state. It cannot tell whether an object moved. Objects can move while you think, because the simulation keeps running.
 - A command whose outcome cannot be confirmed, such as a hand still moving after the time limit, ends the episode. A hand or gripper that stopped short (`stopped`) did run; look at the new observation to see why.
 
+## Grasp orientation
+
+- For grasping tasks, assess both position and orientation before the
+  final descent. Include the orientation choice and its visible basis
+  in the action reason, including when keeping the current orientation.
+- For elongated objects, choose a grasp where the finger closing
+  direction crosses the object's long axis. Being between the fingers
+  alone does not establish orientation alignment.
+- When translating while intending to preserve orientation, use the
+  latest measured rpy, or in a plan the previous step's target rpy.
+  Do not reset the angles to zero unless deliberately choosing
+  the zero orientation.
+- After rotating the wrist, re-estimate alignment from the new wrist
+  image before descending. Do not reuse earlier pixel mappings unchanged
+  or equate an image-space angle directly with base_link yaw.
+- If closure visibly pushes or rotates the object, reassess alignment
+  before repeating the same approach.
+
 ## Keep going
 
 - Continue until the task is done. A failed grasp, a rejection or low odds are not reasons to stop. Find the likely cause, change the approach and try again. There is no way to give up; if the task is not done, keep working until the budget runs out.

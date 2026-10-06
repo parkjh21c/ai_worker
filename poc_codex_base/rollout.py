@@ -90,15 +90,35 @@ def build_tool_specs(cfg):
              'allowed, for example after an expired or changed observation.',
              no_arguments),
         spec('robot_move',
-             f'Move one end effector to an absolute pose in {base} (meters, radians). '
-             f'At most {limits["max_step_m"]} m and {limits["max_rotation_rad"]} rad from '
-             'the current measured pose. The gripper is unchanged. status stopped: the hand '
-             'came to rest before the target, for example against an object.',
+             f'Move one end effector to an absolute pose in {base} '
+             '(meters, radians). RPY specifies end-effector orientation '
+             'as Rz(yaw) * Ry(pitch) * Rx(roll), not wrist joint angles '
+             'or rotation increments. A target may change both position '
+             'and orientation. '
+             f'At most {limits["max_step_m"]} m and '
+             f'{limits["max_rotation_rad"]} rad from the current measured '
+             'pose. The rotation limit applies to the total relative '
+             'quaternion rotation, not separately to each Euler angle. '
+             'The gripper is unchanged. status stopped: the hand came '
+             'to rest before the target, for example against an object.',
              action_schema({
                  'arm': arm,
-                 **{axis: number(f'Absolute {base} {axis} in meters.') for axis in 'xyz'},
-                 **{angle: number(f'Absolute {angle} in radians.')
-                    for angle in ('roll', 'pitch', 'yaw')},
+                 **{
+                     axis: number(f'Absolute {base} {axis} in meters.')
+                     for axis in 'xyz'
+                 },
+                 **{
+                     angle: number(
+                         f'Absolute end-effector {angle} in radians. '
+                         'Not an individual wrist joint angle or '
+                         'a rotation increment. Zero requests zero '
+                         'for this angle; it does not preserve the '
+                         'current value. To preserve orientation, '
+                         'use the latest measured rpy, or in a plan '
+                         "the previous step's target rpy."
+                     )
+                     for angle in ('roll', 'pitch', 'yaw')
+                 },
              })),
         spec('robot_gripper',
              'Set one gripper: 0 is open, 1 is closed. status stopped: the fingers came to '

@@ -4,6 +4,13 @@
 
 - All poses are in `base_link`: x forward, y left, z up. Meters and radians.
 - A hand pose is `xyz` and `rpy`, the pose of that arm's end effector link. The rotation is R = Rz(yaw) · Ry(pitch) · Rx(roll).
+- roll, pitch and yaw specify the absolute end-effector orientation
+  in base_link, not individual wrist joint angles or rotation increments.
+- Setting all three angles to zero requests the zero orientation;
+  it does not mean "keep the current orientation".
+- A robot_move target may change both position and orientation.
+- The rotation step limit applies to the total relative quaternion
+  rotation from the current measured pose, not separately to each Euler angle.
 - The gripper points along the -z axis of its end effector link.
 - Packets round poses to 4 decimals.
 - Hand orientation is not fixed. Choose the orientation and approach
