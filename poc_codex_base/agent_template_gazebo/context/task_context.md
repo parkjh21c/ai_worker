@@ -28,10 +28,18 @@ Do the task in the first message as written. When a new observation shows that i
 - For elongated objects, choose a grasp where the finger closing
   direction crosses the object's long axis. Being between the fingers
   alone does not establish orientation alignment.
-- When translating while intending to preserve orientation, use the
-  latest measured rpy, or in a plan the previous step's target rpy.
+- To preserve orientation while translating, reuse the last issued
+  move target rpy for that arm (`result.target`), not measured drift.
+  Before its first move, use the measured rpy as the initial reference.
+  In a plan, use the previous target rpy for that arm.
   Do not reset the angles to zero unless deliberately choosing
   the zero orientation.
+- If a move stops short or its orientation error exceeds the 5°
+  arrival tolerance, assess the images and both position and
+  orientation errors before descending. These errors alone do not
+  identify contact. Do not repeat a blocked target unchanged;
+  reposition or deliberately choose a reachable orientation in
+  clear space.
 - After rotating the wrist, re-estimate alignment from the new wrist
   image before descending. Do not reuse earlier pixel mappings unchanged
   or equate an image-space angle directly with base_link yaw.

@@ -114,8 +114,10 @@ def build_tool_specs(cfg):
                          'a rotation increment. Zero requests zero '
                          'for this angle; it does not preserve the '
                          'current value. To preserve orientation, '
-                         'use the latest measured rpy, or in a plan '
-                         "the previous step's target rpy."
+                         'reuse the last issued move target rpy for that arm, '
+                         'not measured drift. Before its first move, use the '
+                         'measured rpy as the initial reference. In a plan, '
+                         'use the previous target rpy for that arm.'
                      )
                      for angle in ('roll', 'pitch', 'yaw')
                  },
