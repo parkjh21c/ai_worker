@@ -31,6 +31,15 @@ Read `context/robot_contract.md` before your first action. It has the frame, uni
 - Every action needs `request_id` from the latest packet (`action_context.request_id`, also in `next_call`) and a `reason`.
 - Run one robot tool at a time.
 
+## Action plans
+
+- `robot_execute_plan` runs several `robot_move`, `robot_gripper`, `robot_head` and `robot_lift` steps in one call. Each step takes the same arguments as the single tool, without `request_id`. The host checks every step as it would a separate call, but nobody looks at the intermediate images.
+- Use a plan when the intermediate images would not change the next steps. Examples: raising or retracting a hand through space you have already seen to be clear, lifting a held object straight up, moving back along a path you just came.
+- Do not use a plan where the next step depends on what you see: aligning with an object, the final approach or descent, checking a grasp or a release. End the plan before that point and look at the new images.
+- Each step obeys the same limits as a single call. A hand step is measured from where the previous step ended. `robot_head`, `robot_lift` and a nonzero `robot_gripper` may only be the last step.
+- The plan stops at the first step that does not end `arrived` with a valid observation. `result.steps` lists what ran, `result.remaining_steps` what did not, and `result.stop_reason` says why. A completed plan is not a completed task; inspect the final images.
+- `robot_base` cannot be part of a plan. Call it separately.
+
 ## Files
 
 Your working directory is `agent/` of this run. `workspace.json` has the absolute paths.

@@ -367,12 +367,13 @@ class CodexHost:
             self._check_limits()
             if self._finished():
                 break
-            message = self.transport.next_message(self.cfg.poll_s)
+            wait_s = 0.1 if self.active is not None else self.cfg.poll_s
+            message = self.transport.next_message(wait_s)
             if message is not None:
                 self._dispatch(message)
 
     def _end(self, reason, detail=None):
-        """Record the first end reason, block new actions and drop queued calls."""
+        """Record the first end reason, block new actions and drop queued calls"""
         if self.end_reason is not None:
             return
         self.end_reason, self.end_detail = reason, detail

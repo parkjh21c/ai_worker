@@ -26,14 +26,24 @@ outdated scene.
 | `robot_head` | `request_id`, `reason`, `head_joint1`, `head_joint2` | Point the head camera |
 | `robot_lift` | `request_id`, `reason`, `position_m` | Raise or lower the body |
 | `robot_base` | `request_id`, `reason`, `vx`, `vy`, `wz`, `duration_s` | Drive the mobile base for a short time, then stop |
+| `robot_execute_plan` | `request_id`, `reason`, `steps` | Execute a short sequence of actions in one call; steps run sequentially |
 | `task_complete` | `request_id`, `reason` | Declare the task done. Ends the episode |
 
 - Call them inside `exec` as `tools.<name>(arguments)`. Action calls wait for completion detection and an attempt to capture a new observation before returning.
 - The result is one string. Line 1 is a JSON packet. If `packet.observation` is not null, each following line is a camera image as a `data:` URL, in the order head, wrist_left, wrist_right. Pass each `data:` line to `image()` to see it.
 - `action_executed` in the packet says whether a robot command was sent. When it is false, `status`, `rejection` and `reason` say why.
 - Every action needs `request_id` from the latest packet (`action_context.request_id`, also in `next_call`) and a `reason`.
-- Run one robot tool at a time. Call `robot_base` separately; it cannot be included in `robot_execute_plan`.
+- Run one robot tool at a time.
 - After every base command, inspect the new images and `result.motion.odom_measured` before choosing the next action. If the response has no observation, call `robot_observe`.
+
+## Action plans
+
+- `robot_execute_plan` runs several `robot_move`, `robot_gripper`, `robot_head` and `robot_lift` steps in one call. Each step takes the same arguments as the single tool, without `request_id`. The host checks every step as it would a separate call, but nobody looks at the intermediate images.
+- Use a plan when the intermediate images would not change the next steps. Examples: raising or retracting a hand through space you have already seen to be clear, lifting a held object straight up, moving back along a path you just came.
+- Do not use a plan where the next step depends on what you see: aligning with an object, the final approach or descent, checking a grasp or a release. End the plan before that point and look at the new images.
+- Each step obeys the same limits as a single call. A hand step is measured from where the previous step ended. `robot_head`, `robot_lift` and a nonzero `robot_gripper` may only be the last step.
+- The plan stops at the first step that does not end `arrived` with a valid observation. `result.steps` lists what ran, `result.remaining_steps` what did not, and `result.stop_reason` says why. A completed plan is not a completed task; inspect the final images.
+- `robot_base` cannot be part of a plan. Call it separately.
 
 ## Files
 

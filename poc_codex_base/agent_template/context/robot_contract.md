@@ -6,6 +6,11 @@
 - A hand pose is `xyz` and `rpy`, the pose of that arm's end effector link. The rotation is R = Rz(yaw) · Ry(pitch) · Rx(roll).
 - The gripper points along the -z axis of its end effector link.
 - Packets round poses to 4 decimals.
+- Hand orientation is not fixed. Choose the orientation and approach
+  direction to suit the object, within the motion limits.
+- Each wrist camera is rigidly attached to the wrist and looks roughly
+  along the gripper's pointing direction. Rotating the hand also rotates
+  the camera view; it is not fixed to look downward.
 
 ## Arms: `robot_move`
 
