@@ -48,7 +48,7 @@ cyclo:
 
 limits:
   # Matching the reference setup
-  max_step_m: 0.15
+  max_step_m: 0.1
   max_rotation_rad: 0.35
   # Joint limit is 1.1 rad but the fingertips overlap when closing on nothing.
   gripper_rad: [0.0, 1.0]

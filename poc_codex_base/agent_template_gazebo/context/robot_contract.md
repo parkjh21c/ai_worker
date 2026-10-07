@@ -18,6 +18,8 @@
 - Each wrist camera is rigidly attached to the wrist and looks roughly
   along the gripper's pointing direction. Rotating the hand also rotates
   the camera view; it is not fixed to look downward.
+  The camera body protrudes on the end effector's +x side;
+  include it when checking clearance. See "Wrist camera geometry".
 
 ## Arms: `robot_move`
 
@@ -81,6 +83,37 @@
 | `wrist_right` | 424 × 240 | Right wrist |
 
 The three images and robot state are matched within the configured simulation timestamp tolerance. They are not guaranteed to have exactly identical timestamps.
+
+### Wrist camera geometry
+
+For SG2 rev1, both RealSense D405 wrist cameras have the same
+mounting geometry relative to their respective end effector links.
+The values below come from the URDF collision model.
+
+All coordinates are in that hand's end effector frame. The gripper
+points along -z; +z points back toward the wrist.
+
+| Item | Value |
+|---|---|
+| Camera collision-body center | approximately (+0.108, 0, +0.149) m |
+| Collision bounds, rounded outward | x [0.085, 0.130], y [-0.021, 0.021], z [0.135, 0.163] m |
+| View direction | approximately -z, tilted 5.5° toward -x |
+
+- When the hand tilts or turns sideways, the camera can contact
+  a table, shelf or nearby object before the gripper does.
+- Before moving or rotating near an obstacle, use the current and
+  target rpy to identify where the end effector's +x and +z sides
+  face in base_link. Check room for the camera throughout the move,
+  including intermediate orientations. Rotating with unchanged
+  end effector xyz still moves the camera body.
+- Treat these bounds as approximate and allow extra clearance;
+  if clearance is uncertain, reposition into clear space before
+  rotating.
+- Image center is not the gripper axis. Do not apply a fixed
+  offset correction; alignment also depends on object distance
+  and hand orientation. Reassess from visible fingers and a
+  fresh image after rotation.
+- Current observations provide color images, not depth measurements.
 
 ## Observation and request_id
 
