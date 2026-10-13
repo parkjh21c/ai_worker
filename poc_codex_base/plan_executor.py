@@ -40,7 +40,7 @@ def build_plan_spec(specs, cfg):
             'Execute a short preplanned sequence, strictly one action at a time. '
             'The host captures observations and checks state after each action. '
             'It does not visually interpret intermediate images. Continue only '
-            'after arrived with a valid observation. Head, lift, and any nonzero '
+            'after arrived with a valid observation. Head, lift, and every '
             'gripper command must be the final step. Use only when intermediate '
             'visual reasoning is unnecessary. Plan completion is not task completion. '
             'The first response line is a JSON packet, followed by camera data: URLs; '
@@ -102,8 +102,10 @@ def validate_plan(arguments, specs, cfg):
                     raise ValueError(f'Step {i}: invalid {key}.')
             else:
                 raise ValueError(f'Step {i}: unsupported schema for {key}.')
-        checkpoint = name in {'robot_head', 'robot_lift'} or (
-            name == 'robot_gripper' and args['value'] != 0.0)
+        # Opening a gripper can irreversibly release a held object.  Require the
+        # caller to inspect that action's observation before doing anything
+        # else, just as we already do after closing it.
+        checkpoint = name in {'robot_head', 'robot_lift', 'robot_gripper'}
         if checkpoint and i != len(steps):
             raise ValueError(f'Step {i}: this action must be the final step.')
     return deepcopy(steps)

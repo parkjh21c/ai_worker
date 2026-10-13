@@ -125,7 +125,9 @@ def build_tool_specs(cfg):
         spec('robot_gripper',
              'Set one gripper: 0 is open, 1 is closed. status stopped: the fingers came to '
              'rest before the target, for example on an object. Neither a closed nor a '
-             'stopped gripper proves a grasp.',
+             'stopped gripper proves a grasp. Opening while holding an object releases it; '
+             'do not open unless the latest images clearly show the intended support '
+             'directly below the object and the object is low enough to be supported.',
              action_schema({'arm': arm, 'value': number('0 open .. 1 closed.', 0.0, 1.0)})),
         spec('robot_head',
              'Move both head joints to absolute angles in radians. head_joint1 tilts about '

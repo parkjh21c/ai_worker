@@ -23,11 +23,22 @@
 
 ## Arms: `robot_move`
 
+- Each arm's shoulder pivot used for reach estimation is at approximately
+  x -0.02, y +0.23 m for the left arm or -0.23 m for the right arm, and
+  z 1.43 m + lift in `base_link`. Shoulder-to-wrist (link7) distance is
+  about 0.64 m when fully extended.
+- The reported end-effector pose is 0.215 m beyond the wrist along the
+  gripper direction, the end effector's local -z axis. Therefore, the
+  wrist is at the EE position moved 0.215 m along its local +z.
+  Judge geometric reach from the wrist-to-shoulder vector, not from EE x.
+  A distance near 0.64 m is strong evidence of full extension, but joint
+  limits, orientation constraints, or self-collision can reduce the
+  reachable distance.
 - The target is an absolute pose for one arm (`right` or `left`). The other arm and both grippers stay as they are.
 - Either arm can be used. The arms are controlled independently, one call at a time; nothing keeps the two hands in a fixed relation.
 - The hand moves on a straight line to the target. The arm controller tracks it within joint position and velocity limits and a self-collision margin; when a target would break them, the hand leaves the line or stops short, with nothing touched.
-- The controller avoids collisions only between parts of the robot, and not in every case. It does not know about the table or objects: a target inside them drives the hand into them.
-- The target may be at most **0.15 m** away from the current measured position and at most **0.35 rad** of rotation from the current measured orientation. Larger steps are rejected without moving.
+- The controller avoids collisions only between parts of the robot, and not in every case. It does not know about any surface or object, such as a table, a shelf board or a frame: a target inside them drives the hand into them.
+- The target may be at most **0.1 m** away from the current measured position and at most **0.35 rad** of rotation from the current measured orientation. Larger steps are rejected without moving.
 - A target lower than 0.8 m below the arm base is rejected. The arm base moves with the lift.
 - A move ends when the hand comes to rest: it moved less than 0.002 m and 0.5° for 1 s, judged after its 3 s trajectory. A move takes at least 4 s, and the new observation shows the hand at rest.
 - `arrived`: at rest within 0.01 m and 5° of the target. The packet gives the remaining error.
@@ -40,15 +51,37 @@
 - A gripper command ends when the joint comes to rest: the angle moved less than 0.005 rad for 1 s, judged after its 1 s trajectory.
 - `arrived`: at rest within 0.02 rad of the target.
 - `stopped`: at rest farther from the target, for example with the fingers on an object. The gripper keeps closing toward the target until the next gripper command.
-- Neither `arrived` nor `stopped` proves a grasp. Check the images.
+- A rigid object stops the fingers early (`stopped`, e.g. about 0.59 rad on a coffee bottle). Closing to about 1.0 rad means nothing rigid is between the fingers; a soft object such as a snack bag can still be held at that angle. Neither result proves a grasp; check that the object moves with the hand in the images. A small move in any clear direction is enough.
 - If the host cannot confirm that the gripper has come to rest within 15 s, the episode ends with a timeout. This does not cancel the controller command or prove that the gripper stopped.
 - Observations report each gripper as `gripper` (0 to 1) and `gripper_rad`.
+
+### Gripper geometry
+
+Approximate values from the URDF finger meshes, in the hand's end effector
+frame (gripper points along -z, fingers close along ±y):
+
+| Item | Value |
+|---|---|
+| Finger pads, gripper open | z +0.020 to +0.075 m (centre about +0.047), opening about 0.106 m |
+| Finger pads, closed on a 0.06 m wide object | z 0.000 to +0.053 m (centre about +0.025) |
+| Finger width along x | about ±0.013 m |
+
+- The reported EE point is not the pad centre. With the gripper open it lies
+  about 0.02 m beyond the fingertips, and the pads move forward as the
+  gripper closes. An EE target at the object's centre leaves the object at
+  the fingertips. Set the approach depth from the object's width and the
+  values above, and check that there is room for the fingertips behind the
+  object.
+- The pads cover only about ±0.013 m along x. The EE coordinate along that
+  axis is the grasp location: with a forward-pointing hand, EE z is the
+  grasp height.
 
 ## Head: `robot_head`
 
 - `head_joint1` tilts about the head's local Y axis, range -0.2317 to 0.6951 rad.
 - `head_joint2` pans about the head's local Z axis, range -0.35 to 0.35 rad.
 - Values outside the range are rejected without moving.
+- The head stays where it was last set. It views a hand and the object from a different angle than the wrist camera, which helps judge how far the hand still is from the object along the approach.
 
 ## Lift: `robot_lift`
 
@@ -57,9 +90,16 @@
 - The arm controller keeps each hand near its last commanded `base_link` pose by re-bending the arms. The measured poses may lag by about 1 cm while the lift moves, or shift farther near a reach limit.
 - The region the arms can reach moves with the lift: lowering lets the hands reach lower (see the 0.8 m limit under Arms).
 - The head camera moves with the torso, so use a new image after a lift move instead of pixel positions from an earlier head image.
+- The lift also sets the head camera height. A head view near the object's
+  own height shows where along the object the fingers are; a view from well
+  above hides the lower part behind the hand. Change the lift before the
+  hand enters a confined space, not while it is inside.
 
 ## Base: `robot_base`
 
+- The base body is approximately 0.68 m tall. A table can overhang the
+  base only if its underside, frame, legs, and the full approach path
+  provide sufficient clearance.
 - Moves the mobile base by body velocity in `base_link`: `vx` forward and `vy` left in m/s, `wz` counterclockwise in rad/s, for `duration_s` seconds. `duration_s` includes speeding up and slowing down.
 - Each non-zero axis must be at least 0.1 m/s (`vx`, `vy`) or 0.1 rad/s (`wz`); a smaller value would be ignored by the wheel controller, so it is rejected. Use 0 for an axis that should not move.
 - Limits: hypot(`vx`, `vy`) at most 0.15 m/s, |`wz`| at most 0.3 rad/s, `duration_s` at most 2 s, hypot(`vx`, `vy`) × `duration_s` at most 0.2 m, and |`wz`| × `duration_s` at most 0.4 rad. Larger requests are rejected without moving.
@@ -120,6 +160,25 @@ points along -z; +z points back toward the wrist.
   offset correction; alignment also depends on object distance
   and hand orientation. Reassess from visible fingers and a
   fresh image after rotation.
+- Camera body position relative to the EE point, in base_link:
+
+  | rpy | Gripper points | Camera body | Fingers close along |
+  |---|---|---|---|
+  | (0, 0, 0) | down | 0.085 to 0.130 m forward, 0.135 to 0.163 m above | y |
+  | (0, -1.57, 0) | forward | 0.085 to 0.130 m above, 0.135 to 0.163 m behind | y |
+
+  For any other orientation, compute p_base = xyz + R · p_ee.
+- The camera body is never visible in its own image. Judge its clearance
+  from these numbers or from the head image, not from a clear wrist view.
+- The wrist camera sits about 0.10 m to the +x side of the gripper axis and
+  looks almost parallel to it. At grasp distance the image centre is about
+  0.09 m to the +x side of the pads, so the image shows the side of the
+  object nearest the camera (its top, for a forward-pointing hand).
+- The wrist image is reliable for centring the object between the fingers
+  (EE y). Do not settle position along EE x or depth from the wrist image
+  alone; confirm with the head camera or the other wrist camera.
+- With a forward-pointing hand, up in base_link appears toward the right
+  of the wrist image.
 - Current observations provide color images, not depth measurements.
 
 ## Observation and request_id
