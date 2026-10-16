@@ -205,3 +205,40 @@
       disable_torque_on_error: false
       set_led_error_on_error: true
       ffw_type: ffw_sg2_rev1
+
+
+# /**:
+#   joint_state_broadcaster:
+#     ros__parameters:
+#       # Keep the original joint list and order: other nodes read /joint_states
+#       # by index, so the sim-only mimic finger joints must not be published.
+#       joints:
+#         - arm_l_joint1
+#         - arm_l_joint2
+#         - arm_l_joint3
+#         - arm_l_joint4
+#         - arm_l_joint5
+#         - arm_l_joint6
+#         - arm_l_joint7
+#         - arm_r_joint1
+#         - arm_r_joint2
+#         - arm_r_joint3
+#         - arm_r_joint4
+#         - arm_r_joint5
+#         - arm_r_joint6
+#         - arm_r_joint7
+#         - gripper_l_joint1
+#         - gripper_r_joint1
+#         - head_joint1
+#         - head_joint2
+#         - left_wheel_drive
+#         - left_wheel_steer
+#         - lift_joint
+#         - rear_wheel_drive
+#         - rear_wheel_steer
+#         - right_wheel_drive
+#         - right_wheel_steer
+#       interfaces:
+#         - position
+#         - velocity
+#         - effort
