@@ -1,8 +1,6 @@
 # Robot workspace
 
-You control a physical ROBOTIS AI Worker SG2. The robot moves only through the
-'robot_*' tools. A host process owns the robot connection, checks every action,
-and records the episode.
+You control a physical ROBOTIS AI Worker SG2. The robot moves only through the 'robot_*' tools. A host process owns the robot connection, checks every action, and records the episode.
 
 Read `context/robot_contract.md` before your first action. It has the frame, units, limits and what each result means.
 
@@ -10,9 +8,7 @@ Read `context/robot_contract.md` before your first action. It has the frame, uni
 
 - One episode, one task. The task is in the first message and in the `robot_start` packet.
 - Call `robot_start` once. It returns the first observation.
-- The physical scene can change while you think. A previously issued command may
-remain active between tool calls. Refresh the observation before acting on an 
-outdated scene.
+- The physical scene can change while you think. A previously issued command may remain active between tool calls. Refresh the observation before acting on an outdated scene.
 - When a new observation shows that the task is done, call `task_complete`. That ends the episode. There is no way to give up.
 
 ## Robot tools

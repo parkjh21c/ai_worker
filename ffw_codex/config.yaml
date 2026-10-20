@@ -6,13 +6,13 @@ model:
   # USD per 1M tokens (public list price), for cost_usd_estimate in result.json
   price_per_million: {input: 10.0, cached_input: 1.0, cache_write: 12.5, output: 50.0}
 
+plan:
+  max_steps: 5
+
 codex:
   bin: /usr/local/bin/codex
   home: /root/.codex_robot
   permission_profile: robot_run
-
-plan:
-  max_steps: 5
 
 episode:
   max_actions: 80
@@ -47,7 +47,6 @@ cyclo:
   move_time_s: 3.0
 
 limits:
-  # Matching the reference setup
   max_step_m: 0.1
   max_rotation_rad: 0.35
   # Joint limit is 1.1 rad but the fingertips overlap when closing on nothing.
@@ -83,8 +82,8 @@ body_motion:
 tolerance:
   position_m: 0.01
   orientation_deg: 5
-  gripper_rad: 0.02   # Tolerance is for the gripper joint(+/-)
-  settle_s: 0.5       # Completion requires the state to remain
+  gripper_rad: 0.02
+  settle_s: 0.5
   # Wall clock, not simulation time. Cyclo doesn't use sim time.
   timeout_s: 15.0
   # A move or gripper command ends when it comes to rest: it moved less than

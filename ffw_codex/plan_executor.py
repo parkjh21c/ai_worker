@@ -9,7 +9,7 @@ ALLOWED = {'robot_move', 'robot_gripper', 'robot_head', 'robot_lift'}
 
 
 def max_steps(cfg):
-    value = cfg.get('plan', {}).get('max_steps', 3)
+    value = cfg.get('plan', {}).get('max_steps', 5)
     if type(value) is not int or not 1 <= value <= 10:
         raise ValueError('plan.max_steps must be an integer in [1, 10]')
     return value
@@ -61,7 +61,7 @@ def build_plan_spec(specs, cfg):
 
 
 def validate_plan(arguments, specs, cfg):
-    """Check ALL static arguments before the first command is sent."""
+    """Check all static arguments before the first command is sent."""
     if not isinstance(arguments, dict) or set(arguments) != {'request_id', 'reason', 'steps'}:
         raise ValueError('Expected request_id, reason, steps.')
     for key in ('request_id', 'reason'):
@@ -102,9 +102,6 @@ def validate_plan(arguments, specs, cfg):
                     raise ValueError(f'Step {i}: invalid {key}.')
             else:
                 raise ValueError(f'Step {i}: unsupported schema for {key}.')
-        # Opening a gripper can irreversibly release a held object.  Require the
-        # caller to inspect that action's observation before doing anything
-        # else, just as we already do after closing it.
         checkpoint = name in {'robot_head', 'robot_lift', 'robot_gripper'}
         if checkpoint and i != len(steps):
             raise ValueError(f'Step {i}: this action must be the final step.')
@@ -154,7 +151,7 @@ def execute_plan(rollout, index, arguments):
             break
 
         summary['running_step'] = step_index
-        save_journal()  # Persist BEFORE entering code that may publish a command.
+        save_journal()
         try:
             response = rollout._act(
                 index, step['tool'],

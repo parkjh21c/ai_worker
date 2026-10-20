@@ -21,7 +21,6 @@
     const type = transport === 'compressed' ? 'ros_compressed' : 'mjpeg';
     return `${url.href.replace(/\/+$/, '')}/stream?quality=50&type=${type}&default_transport=${transport}&topic=${topic}`;
   }
-  // Exposed for a small, dependency-free URL contract check.
   window.buildCameraStreamUrl = buildStreamUrl;
 
   window.updateLiveLabels = () => {

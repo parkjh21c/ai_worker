@@ -148,7 +148,7 @@ class HostConfig:
     codex: str = '/usr/local/bin/codex'
     codex_home: Path = Path('/root/.codex_robot')
     home: str = '/root'
-    permission_profile: str = 'poc_run'
+    permission_profile: str = 'robot_run'
     disabled_features: tuple = DISABLED_FEATURES
     request_timeout_s: float = 60.0
     poll_s: float = 2.0

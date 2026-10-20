@@ -16,7 +16,6 @@ from codex_host import utc_now, write_json
 
 
 HERE = Path(__file__).resolve().parent
-TEMPLATE_DIR = HERE / 'agent_template'
 # File names Codex loads as instructions, in CODEX_HOME and project folders.
 AGENTS_FILES = ('AGENTS.md', 'AGENTS.override.md')
 CAMERAS = ('head', 'wrist_left', 'wrist_right')
@@ -46,7 +45,7 @@ def stray_agents_files(agent_dir, codex_home):
     return [str(path) for path in candidates if path.exists()]
 
 
-def prepare_workspace(run_dir, codex_home, template_dir=TEMPLATE_DIR):
+def prepare_workspace(run_dir, codex_home, template_dir):
     """Create run_dir/agent from the template and return its path.
 
     Fails if agent/ already exists, so a run never reuses another run's notes.

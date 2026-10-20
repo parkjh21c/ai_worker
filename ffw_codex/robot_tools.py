@@ -27,7 +27,6 @@ def _finite_float(args, key):
     if isinstance(raw, bool):
         return None, f'{key} is not a number ({raw!r})'
 
-    # Convert the required argument to float and catch invalid numeric input
     try:
         value = float(raw)
     except (TypeError, ValueError):
@@ -296,7 +295,6 @@ class RobotTools:
                 'arms': self._model_arms(raw['arms']),
                 'clock': raw['clock'],
                 'body': raw['body'],
-                # Only the Gazebo RobotIO reports a base.
                 **({'base': self._model_base(raw['base'])} if 'base' in raw else {}),
             },
             'images': [],
@@ -386,7 +384,6 @@ class RobotTools:
             'yaw': yaw,
         }
 
-        # Check the arm before using it to query RobotIO
         if arm not in self.cfg['frames']['ee']:
             return {
                 'status': 'rejected',
@@ -396,7 +393,6 @@ class RobotTools:
                 'images': [],
             }
 
-        # Read the measured pose used for the maximum-step validation.
         try:
             current_pose = self.io.get_ee_pose(arm)
         except Exception as exc:
@@ -411,7 +407,6 @@ class RobotTools:
                 'images': [],
             }
 
-        # Read the lift-carried arm base so the reach bound follows the lift
         try:
             arm_base = self.io.get_arm_base_z()
         except Exception as exc:
@@ -426,7 +421,6 @@ class RobotTools:
                 'images': [],
             }
 
-        # Validate the move and catch malformed configuration or state data.
         try:
             ok, reason, target = validate_move(args, self.cfg, current_pose, arm_base['z'])
         except Exception as exc:
@@ -453,7 +447,6 @@ class RobotTools:
                 'images': [],
             }
 
-        # Publish the MoveL target and catch subscriber or ROS publication failures.
         try:
             sent = self.io.send_pose(arm, target)
         except Exception as exc:
@@ -471,7 +464,6 @@ class RobotTools:
                 'images': [],
             }
 
-        # Wait for measured pose convergence and catch TF or observation failures.
         try:
             arrival = self.io.wait_until_arrived(arm, target, sent['quat'])
         except Exception as exc:
@@ -551,7 +543,6 @@ class RobotTools:
                 'images': [],
             }
 
-        # Publish the gripper trajectory and catch subscriber or ROS publication failures.
         try:
             target_rad = self.io.send_gripper(
                 clean['arm'],
@@ -569,7 +560,6 @@ class RobotTools:
                 'images': [],
             }
 
-        # Wait for measured gripper convergence and catch joint-state failures.
         try:
             arrival = self.io.wait_until_gripper_arrived(
                 clean['arm'],
@@ -653,7 +643,6 @@ class RobotTools:
         """Validate, send, wait and capture one head/lift movement"""
         targets = {}
 
-        # Validate before publishing and command
         for joint in self.io.body_groups[group]:
             value, error = _finite_float(requested, joint)
 
@@ -676,7 +665,6 @@ class RobotTools:
 
             targets[joint] = value
 
-        # Check that measured state is available before sending
         try:
             self.io.get_body_state(group=group)
             sent_at = self.io.send_body(group, targets)
@@ -1059,7 +1047,6 @@ class RobotTools:
             'move_base': self.move_base,
         }
 
-        # Execute the selected tool and convert unexpected failures to a result.
         try:
             result = handlers[name](**args)
         except Exception as exc:

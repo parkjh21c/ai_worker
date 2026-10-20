@@ -4,36 +4,19 @@
 
 - All poses are in `base_link`: x forward, y left, z up. Meters and radians.
 - A hand pose is `xyz` and `rpy`, the pose of that arm's end effector link. The rotation is R = Rz(yaw) · Ry(pitch) · Rx(roll).
-- roll, pitch and yaw specify the absolute end-effector orientation
-  in base_link, not individual wrist joint angles or rotation increments.
-- Setting all three angles to zero requests the zero orientation;
-  it does not mean "keep the current orientation".
+- roll, pitch and yaw specify the absolute end-effector orientation in base_link, not individual wrist joint angles or rotation increments.
+- Setting all three angles to zero requests the zero orientation; it does not mean "keep the current orientation".
 - A robot_move target may change both position and orientation.
-- The rotation step limit applies to the total relative quaternion
-  rotation from the current measured pose, not separately to each Euler angle.
+- The rotation step limit applies to the total relative quaternion rotation from the current measured pose, not separately to each Euler angle.
 - The gripper points along the -z axis of its end effector link.
 - Packets round poses to 4 decimals.
-- Hand orientation is not fixed. Choose the orientation and approach
-  direction to suit the object, within the motion limits.
-- Each wrist camera is rigidly attached to the wrist and looks roughly
-  along the gripper's pointing direction. Rotating the hand also rotates
-  the camera view; it is not fixed to look downward.
-  The camera body protrudes on the end effector's +x side;
-  include it when checking clearance. See "Wrist camera geometry".
+- Hand orientation is not fixed. Choose the orientation and approach direction to suit the object, within the motion limits.
+- Each wrist camera is rigidly attached to the wrist and looks roughly along the gripper's pointing direction. Rotating the hand also rotates the camera view; it is not fixed to look downward. The camera body protrudes on the end effector's +x side; include it when checking clearance. See "Wrist camera geometry".
 
 ## Arms: `robot_move`
 
-- Each arm's shoulder pivot used for reach estimation is at approximately
-  x -0.02, y +0.23 m for the left arm or -0.23 m for the right arm, and
-  z 1.43 m + lift in `base_link`. Shoulder-to-wrist (link7) distance is
-  about 0.64 m when fully extended.
-- The reported end-effector pose is 0.215 m beyond the wrist along the
-  gripper direction, the end effector's local -z axis. Therefore, the
-  wrist is at the EE position moved 0.215 m along its local +z.
-  Judge geometric reach from the wrist-to-shoulder vector, not from EE x.
-  A distance near 0.64 m is strong evidence of full extension, but joint
-  limits, orientation constraints, or self-collision can reduce the
-  reachable distance.
+- Each arm's shoulder pivot used for reach estimation is at approximately x -0.02, y +0.23 m for the left arm or -0.23 m for the right arm, and z 1.43 m + lift in `base_link`. Shoulder-to-wrist (link7) distance is about 0.64 m when fully extended.
+- The reported end-effector pose is 0.215 m beyond the wrist along the gripper direction, the end effector's local -z axis. Therefore, the wrist is at the EE position moved 0.215 m along its local +z. Judge geometric reach from the wrist-to-shoulder vector, not from EE x. A distance near 0.64 m is strong evidence of full extension, but joint limits, orientation constraints, or self-collision can reduce the reachable distance.
 - The target is an absolute pose for one arm (`right` or `left`). The other arm and both grippers stay as they are.
 - Either arm can be used. The arms are controlled independently, one call at a time; nothing keeps the two hands in a fixed relation.
 - The hand moves on a straight line to the target. The arm controller tracks it within joint position and velocity limits and a self-collision margin; when a target would break them, the hand leaves the line or stops short, with nothing touched.
@@ -66,15 +49,8 @@ frame (gripper points along -z, fingers close along ±y):
 | Finger pads, closed on a 0.06 m wide object | z 0.000 to +0.053 m (centre about +0.025) |
 | Finger width along x | about ±0.013 m |
 
-- The reported EE point is not the pad centre. With the gripper open it lies
-  about 0.02 m beyond the fingertips, and the pads move forward as the
-  gripper closes. An EE target at the object's centre leaves the object at
-  the fingertips. Set the approach depth from the object's width and the
-  values above, and check that there is room for the fingertips behind the
-  object.
-- The pads cover only about ±0.013 m along x. The EE coordinate along that
-  axis is the grasp location: with a forward-pointing hand, EE z is the
-  grasp height.
+- The reported EE point is not the pad centre. With the gripper open it lies about 0.02 m beyond the fingertips, and the pads move forward as the gripper closes. An EE target at the object's centre leaves the object at the fingertips. Set the approach depth from the object's width and the values above, and check that there is room for the fingertips behind the object.
+- The pads cover only about ±0.013 m along x. The EE coordinate along that axis is the grasp location: with a forward-pointing hand, EE z is the grasp height.
 
 ## Head: `robot_head`
 
@@ -90,16 +66,11 @@ frame (gripper points along -z, fingers close along ±y):
 - The arm controller keeps each hand near its last commanded `base_link` pose by re-bending the arms. The measured poses may lag by about 1 cm while the lift moves, or shift farther near a reach limit.
 - The region the arms can reach moves with the lift: lowering lets the hands reach lower (see the 0.8 m limit under Arms).
 - The head camera moves with the torso, so use a new image after a lift move instead of pixel positions from an earlier head image.
-- The lift also sets the head camera height. A head view near the object's
-  own height shows where along the object the fingers are; a view from well
-  above hides the lower part behind the hand. Change the lift before the
-  hand enters a confined space, not while it is inside.
+- The lift also sets the head camera height. A head view near the object's own height shows where along the object the fingers are; a view from well above hides the lower part behind the hand. Change the lift before the hand enters a confined space, not while it is inside.
 
 ## Base: `robot_base`
 
-- The base body is approximately 0.68 m tall. A table can overhang the
-  base only if its underside, frame, legs, and the full approach path
-  provide sufficient clearance.
+- The base body is approximately 0.68 m tall. A table can overhang the base only if its underside, frame, legs, and the full approach path provide sufficient clearance.
 - Moves the mobile base by body velocity in `base_link`: `vx` forward and `vy` left in m/s, `wz` counterclockwise in rad/s, for `duration_s` seconds. `duration_s` includes speeding up and slowing down.
 - Each non-zero axis must be at least 0.1 m/s (`vx`, `vy`) or 0.1 rad/s (`wz`); a smaller value would be ignored by the wheel controller, so it is rejected. Use 0 for an axis that should not move.
 - Limits: hypot(`vx`, `vy`) at most 0.15 m/s, |`wz`| at most 0.3 rad/s, `duration_s` at most 2 s, hypot(`vx`, `vy`) × `duration_s` at most 0.2 m, and |`wz`| × `duration_s` at most 0.4 rad. Larger requests are rejected without moving.
@@ -146,20 +117,10 @@ points along -z; +z points back toward the wrist.
 | Collision bounds, rounded outward | x [0.085, 0.130], y [-0.021, 0.021], z [0.135, 0.163] m |
 | View direction | approximately -z, tilted 5.5° toward -x |
 
-- When the hand tilts or turns sideways, the camera can contact
-  a table, shelf or nearby object before the gripper does.
-- Before moving or rotating near an obstacle, use the current and
-  target rpy to identify where the end effector's +x and +z sides
-  face in base_link. Check room for the camera throughout the move,
-  including intermediate orientations. Rotating with unchanged
-  end effector xyz still moves the camera body.
-- Treat these bounds as approximate and allow extra clearance;
-  if clearance is uncertain, reposition into clear space before
-  rotating.
-- Image center is not the gripper axis. Do not apply a fixed
-  offset correction; alignment also depends on object distance
-  and hand orientation. Reassess from visible fingers and a
-  fresh image after rotation.
+- When the hand tilts or turns sideways, the camera can contact a table, shelf or nearby object before the gripper does.
+- Before moving or rotating near an obstacle, use the current and target rpy to identify where the end effector's +x and +z sides face in base_link. Check room for the camera throughout the move, including intermediate orientations. Rotating with unchanged end effector xyz still moves the camera body.
+- Treat these bounds as approximate and allow extra clearance; if clearance is uncertain, reposition into clear space before rotating.
+- Image center is not the gripper axis. Do not apply a fixed offset correction; alignment also depends on object distance and hand orientation. Reassess from visible fingers and a fresh image after rotation.
 - Camera body position relative to the EE point, in base_link:
 
   | rpy | Gripper points | Camera body | Fingers close along |
@@ -168,17 +129,10 @@ points along -z; +z points back toward the wrist.
   | (0, -1.57, 0) | forward | 0.085 to 0.130 m above, 0.135 to 0.163 m behind | y |
 
   For any other orientation, compute p_base = xyz + R · p_ee.
-- The camera body is never visible in its own image. Judge its clearance
-  from these numbers or from the head image, not from a clear wrist view.
-- The wrist camera sits about 0.10 m to the +x side of the gripper axis and
-  looks almost parallel to it. At grasp distance the image centre is about
-  0.09 m to the +x side of the pads, so the image shows the side of the
-  object nearest the camera (its top, for a forward-pointing hand).
-- The wrist image is reliable for centring the object between the fingers
-  (EE y). Do not settle position along EE x or depth from the wrist image
-  alone; confirm with the head camera or the other wrist camera.
-- With a forward-pointing hand, up in base_link appears toward the right
-  of the wrist image.
+- The camera body is never visible in its own image. Judge its clearance from these numbers or from the head image, not from a clear wrist view.
+- The wrist camera sits about 0.10 m to the +x side of the gripper axis and looks almost parallel to it. At grasp distance the image centre is about 0.09 m to the +x side of the pads, so the image shows the side of the object nearest the camera (its top, for a forward-pointing hand).
+- The wrist image is reliable for centring the object between the fingers (EE y). Do not settle position along EE x or depth from the wrist image alone; confirm with the head camera or the other wrist camera.
+- With a forward-pointing hand, up in base_link appears toward the right of the wrist image.
 - Current observations provide color images, not depth measurements.
 
 ## Observation and request_id

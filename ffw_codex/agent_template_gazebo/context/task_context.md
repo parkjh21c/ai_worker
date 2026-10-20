@@ -22,38 +22,18 @@ Do the task in the first message as written. When a new observation shows it is 
 
 ## Reach before grasping or placing
 
-- Before reaching to grasp or place, position the base and adjust the lift
-  so that the wrist remains comfortably inside its reach from the shoulder.
-  Account for hand orientation when deriving the wrist position. A top-down
-  hand usually requires the base to be closer, or the lift lower, than a
-  forward-pointing hand for the same EE target.
-- If a move stops short, first use the images, position and orientation
-  errors, and the wrist-to-shoulder vector to distinguish a reach or posture
-  limit from contact, an obstacle, or self-collision.
-- When the wrist is near full extension and no obstruction explains the
-  stop, do not extend farther. Retract through known-clear space to the
-  base-safe posture. Reduce mainly horizontal separation with the base and
-  mainly vertical separation with the lift, then inspect a fresh observation
-  and retry. Check hand, held-object, and surrounding clearance before
-  moving the lift.
+- Before reaching to grasp or place, position the base and adjust the lift so that the wrist remains comfortably inside its reach from the shoulder. Account for hand orientation when deriving the wrist position. A top-down hand usually requires the base to be closer, or the lift lower, than a forward-pointing hand for the same EE target.
+- If a move stops short, first use the images, position and orientation errors, and the wrist-to-shoulder vector to distinguish a reach or posture limit from contact, an obstacle, or self-collision.
+- When the wrist is near full extension and no obstruction explains the stop, do not extend farther. Retract through known-clear space to the base-safe posture. Reduce mainly horizontal separation with the base and mainly vertical separation with the lift, then inspect a fresh observation and retry. Check hand, held-object, and surrounding clearance before moving the lift.
 
 ## Clearance
 
-- Before approaching, find what bounds the space around the object: the
-  support below it and anything above, behind or beside it. In the reason of
-  the first approach action, state which sides are open and which are blocked.
-- Approach from an open side. The whole hand must fit along the path: the
-  fingers and the camera body at its offset.
-- Clearance is the gap between an obstacle and the nearest part of the hand,
-  the camera body, or the held object, not the gap above the object alone.
-- After closing, choose the smallest motion that frees the object from its
-  support. If that needs a rise, keep it within the clearance above.
-- The reverse of the approach is the default way out, but the hand entered
-  empty and leaves with an object. Before withdrawing, check that the hand,
-  the camera body and the held object together fit along that path; if they
-  do not, choose another clear direction.
-- A grasp check does not need a lift. The object leaving its place and
-  moving with the hand in any direction is the evidence.
+- Before approaching, find what bounds the space around the object: the support below it and anything above, behind or beside it. In the reason of the first approach action, state which sides are open and which are blocked.
+- Approach from an open side. The whole hand must fit along the path: the fingers and the camera body at its offset.
+- Clearance is the gap between an obstacle and the nearest part of the hand, the camera body, or the held object, not the gap above the object alone.
+- After closing, choose the smallest motion that frees the object from its support. If that needs a rise, keep it within the clearance above.
+- The reverse of the approach is the default way out, but the hand entered empty and leaves with an object. Before withdrawing, check that the hand, the camera body and the held object together fit along that path; if they do not, choose another clear direction.
+- A grasp check does not need a lift. The object leaving its place and moving with the hand in any direction is the evidence.
 
 ## Grasping
 
@@ -63,13 +43,8 @@ Do the task in the first message as written. When a new observation shows it is 
 - After a stopped move or orientation error over 5 degrees, assess images and both errors before the final approach. Do not repeat a blocked target unchanged; reposition or deliberately choose a reachable orientation in clear space.
 - After wrist rotation, re-estimate from the new wrist image. Do not reuse old pixel mappings or equate image angle with base_link yaw.
 - If closing pushes or rotates the object, reassess before repeating the approach.
-- Before closing, check that the part of the object you want to hold is
-  at the finger contact area, in both height and depth. The contact area
-  is behind the reported EE point; see "Gripper geometry" in the contract.
-- Choose the grasp point before the final approach. Prefer a stable part of
-  the object's body. Choose a cap, a neck or a thin edge only when the images
-  show it will hold. In the reason of the closing action, name the part the
-  fingers are on and the evidence for it.
+- Before closing, check that the part of the object you want to hold is at the finger contact area, in both height and depth. The contact area is behind the reported EE point; see "Gripper geometry" in the contract.
+- Choose the grasp point before the final approach. Prefer a stable part of the object's body. Choose a cap, a neck or a thin edge only when the images show it will hold. In the reason of the closing action, name the part the fingers are on and the evidence for it.
 
 ## Placing
 

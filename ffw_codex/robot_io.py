@@ -116,7 +116,6 @@ class RobotIO(Node):
                 raise ValueError(f'invalid limits. {key}')
             self.body_limits[joint] = (lower, upper)
 
-        # Optional configuration. These are initial tuning values
         motion_cfg = cfg.get('body_motion', {})
         self.body_move_time_s = float(motion_cfg.get('move_time_s', 3.0))
 
@@ -328,8 +327,7 @@ class RobotIO(Node):
     def get_ee_pose(self, arm, timeout_s=None):
         """Latest measured base_link -> end effector transform.
 
-        Real SG2 coordinates, meters, quaternion (x, y, z, w). No Cyclo offset.
-        stamp_s is the simulation time of the transform.
+        Real SG2 coordinates, meters, quaternion (x, y, z, w)
         """
         if timeout_s is None:
             timeout_s = self.lookup_timeout_s
@@ -339,8 +337,6 @@ class RobotIO(Node):
         while True:
             self._check_running()
             try:
-                # Time() requests the latest available transform. Explicit TF
-                # times, if needed, must come from simulation-stamped data.
                 tf = self.tf_buffer.lookup_transform(base, ee, Time())
             except TransformException as exc:
                 if time.monotonic() >= deadline:
@@ -523,9 +519,7 @@ class RobotIO(Node):
             )
         
     def get_state(self):
-        """Latest value of each source for both arms, plus the simulation clock. Raw units.
-
-        Sources are sampled independently and retain their own timestamps.
+        """Sources are sampled independently and retain their own timestamps.
         Camera data is queried separately with get_snapshot().
         """
         arms = {}
@@ -545,17 +539,12 @@ class RobotIO(Node):
         return min(history, key=lambda entry: abs(entry['stamp_s'] - stamp_s), default=None)
 
     def _state_at(self, stamp_s, joints):
-        """Arm poses from TF and gripper samples at one simulation time.
-
-        Returns (problem, arms). problem is None when every value was found.
-        """
+        """Returns (problem, arms). problem is None when every value was found."""
         base = self.cfg['frames']['base']
         tol = self.snapshot_tolerance_s
         arms = {}
         for arm, ee in self.cfg['frames']['ee'].items():
             try:
-                # TF keeps sim-stamped samples and interpolates between them.
-                # A stamp newer than the last /tf raises, and the caller retries.
                 tf = self.tf_buffer.lookup_transform(base, ee, Time(seconds=stamp_s))
             except TransformException as exc:
                 return f'tf {base} -> {ee} at {stamp_s:.3f} not available yet ({type(exc).__name__})', None

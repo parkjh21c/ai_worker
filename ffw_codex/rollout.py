@@ -478,7 +478,6 @@ class RobotRollout:
             if data.get('motion') is not None:
                 action_result['motion'] = self._motion(data['motion'])
             if data.get('post_observation') is None or data.get('post_observation_error'):
-                # R4: the action finished but no new picture exists.
                 with self.lock:
                     self.context = None
                 return reply(
@@ -491,7 +490,6 @@ class RobotRollout:
                                reason=result.get('reason'), result=action_result,
                                observation=observation, images=result['images'])
 
-        # R5: timeout, error or anything else after a possible command.
         with self.lock:
             self._finish('uncertain_execution')
         raise UncertainExecution(f'{tool}: status={status} command_sent={sent} '
