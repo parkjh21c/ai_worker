@@ -1193,38 +1193,50 @@ class RobotIO(Node):
         group,
         targets,
         after_received,
-        timeout_s=None,
         settle_s=None,
     ):
-        """Wait for fresh measured positions to settle inside tolerance"""
+        """Wait for fresh measured positions to settle inside tolerance or come to rest
+
+        No time limit in Gazebo: a slow joint is waited for, and one that comes
+        to rest outside tolerance ends as stopped.
+        """
         tolerance = self.cfg['tolerance']
 
-        if timeout_s is None:
-            timeout_s = float(tolerance['timeout_s'])
         if settle_s is None:
             settle_s = float(tolerance['settle_s'])
-
-        timeout_s = float(timeout_s)
         settle_s = float(settle_s)
-
-        if not math.isfinite(timeout_s) or timeout_s <= 0.0:
-            raise ValueError('timeout_s must be finite and positive')
         if not math.isfinite(settle_s) or settle_s < 0.0:
             raise ValueError('settle_s must be finite and non-negative')
 
+        joints = self.body_groups[group]
+        stall_s = float(tolerance['stall_s'])
+        stall_step = {
+            joint: (
+                float(tolerance['stall_position_m'])
+                if self.body_units[joint] == 'm'
+                else math.radians(float(tolerance['stall_orientation_deg']))
+            )
+            for joint in joints
+        }
+
         started = time.monotonic()
-        deadline = started + timeout_s
+        rest = StallDetector(
+            stall_s,
+            self.body_move_time_s + stall_s,
+            started,
+            lambda old, new: any(
+                abs(old[joint] - new[joint]) > stall_step[joint]
+                for joint in joints
+            ),
+        )
         inside_since = None
         previous_stamps = None
         rewinds = self.get_sim_clock()['rewinds']
 
         while True:
-            now = time.monotonic()
-            remaining = max(0.0, deadline - now)
-
             measured = self.get_body_state(
                 group=group,
-                timeout_s=min(self.lookup_timeout_s, remaining),
+                timeout_s=self.lookup_timeout_s,
                 after_received=after_received,
             )
 
@@ -1233,7 +1245,7 @@ class RobotIO(Node):
 
             errors = {
                 joint: abs(measured[joint]['position'] - targets[joint])
-                for joint in self.body_groups[group]
+                for joint in joints
             }
 
             inside = all(
@@ -1256,6 +1268,7 @@ class RobotIO(Node):
 
             now = time.monotonic()
             arrived = False
+            stopped = False
 
             if not inside:
                 inside_since = None
@@ -1268,21 +1281,25 @@ class RobotIO(Node):
                         inside_since = now
                     arrived = now - inside_since >= settle_s
 
+                positions = {
+                    joint: measured[joint]['position']
+                    for joint in joints
+                }
+                stalled = rest.update(now, min(stamps.values()), positions)
+                stopped = stalled and not inside
+
             result = {
                 'arrived': arrived,
+                'stopped': stopped,
                 'joints': measured,
                 'errors': errors,
                 'elapsed_s': now - started,
             }
 
-            if now >= deadline:
-                result['arrived'] = False
+            if arrived or stopped:
                 return result
 
-            if arrived:
-                return result
-
-            time.sleep(min(0.02, max(0.0, deadline - now)))
+            time.sleep(0.02)
 
     def _body_state_at(self, stamp_s, histories):
         """Match head/lift samples to the selected camera timestamp."""

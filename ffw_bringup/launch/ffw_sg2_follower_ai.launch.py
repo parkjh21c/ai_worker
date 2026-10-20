@@ -214,7 +214,7 @@ def generate_launch_description():
 
     # Add a TimerAction to delay swerve_drive_spawner by 5 seconds after unspawning
     swerve_drive_spawner_delayed = TimerAction(
-        period=5.0,
+        period=10.0,
         actions=[swerve_drive_spawner],
     )
 

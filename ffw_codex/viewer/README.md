@@ -18,9 +18,9 @@ for viewing the exported HTML. It includes the selected run's records and JPEGs.
 To export another run, from the `ai_worker` Git repository root (use an existing run ID):
 
 ```bash
-python3 poc_codex/export_viewer.py \
-  poc_codex/runs/20260928_003947 \
-  --output poc_codex/run_viewer.html
+python3 ffw_codex/export_viewer.py \
+  ffw_codex/runs/<run_id> \
+  --output ffw_codex/run_viewer.html
 ```
 
 The exporter uses only Python's standard library. The page template is
@@ -29,11 +29,11 @@ The exporter uses only Python's standard library. The page template is
 ## Follow an active robot run over SSH
 
 Open the viewer through the robot's Live Server URL (for example, forwarded
-`http://localhost:5500/poc_codex/run_viewer.html`). Enter a **Run folder** name,
-such as `20260928_003947`, and click **Follow run**. The page reads
-`poc_codex/runs/<run_id>/` using the same Live Server connection. No new
+`http://localhost:5500/ffw_codex/run_viewer.html`). Enter a **Run folder** name,
+such as `gz_01`, and click **Follow run**. The page reads
+`ffw_codex/runs/<run_id>/` using the same Live Server connection. No new
 server or ROS node is needed for run records. The run folder must be under
-`poc_codex/runs` next to `run_viewer.html`, and the browser must be able to
+`ffw_codex/runs` next to `run_viewer.html`, and the browser must be able to
 fetch its `run.json` through that URL.
 
 The page checks for new call requests, public history, observations, and

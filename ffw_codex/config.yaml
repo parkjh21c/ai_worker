@@ -8,8 +8,8 @@ model:
 
 codex:
   bin: /usr/local/bin/codex
-  home: /root/.codex_poc
-  permission_profile: poc_run
+  home: /root/.codex_robot
+  permission_profile: robot_run
 
 plan:
   max_steps: 5
@@ -139,7 +139,6 @@ base:
   rest_speed_rps: 0.02
   rest_timeout_s: 5.0
   # Base motion only with both hands near the body (base_link) and the lift in range.
-  # Gazebo start pose: hands x 0.431, |y| 0.200; lift about -0.08. Set on hardware separately.
   allowed_posture:
     ee_x_max_m: 0.48
     ee_abs_y_max_m: 0.30

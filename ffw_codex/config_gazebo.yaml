@@ -12,8 +12,8 @@ plan:
 
 codex:
   bin: /usr/local/bin/codex
-  home: /root/.codex_poc
-  permission_profile: poc_run
+  home: /root/.codex_robot
+  permission_profile: robot_run
 
 episode:
   max_actions: 80

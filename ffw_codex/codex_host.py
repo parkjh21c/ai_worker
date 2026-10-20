@@ -21,8 +21,6 @@ import traceback
 from transport import AppServerTransport, RpcError, TransportClosed, redact
 
 
-# On by default in Codex 0.155.1 but not wanted for a robot policy agent.
-# code_mode_host must stay on: gpt-6-astra calls every tool through code mode.
 DISABLED_FEATURES = (
     'browser_use',
     'browser_use_external',
@@ -103,7 +101,6 @@ def render_codex_config(run_dir, codex_home, profile):
         '":root" = "deny"',
         '":minimal" = "read"',
         f'{quote(Path(codex_home) / "packages")} = "read"',
-        '"/root/.codex_poc/packages/standalone/releases/0.158.0-aarch64-unknown-linux-musl" = "read"',
         '',
         f'[permissions.{profile}.filesystem.{quote(Path(run_dir).resolve())}]',
         '"public" = "read"',
@@ -149,7 +146,7 @@ class HostConfig:
     model: str = 'gpt-6-astra'
     effort: str = 'low'
     codex: str = '/usr/local/bin/codex'
-    codex_home: Path = Path('/root/.codex_poc')
+    codex_home: Path = Path('/root/.codex_robot')
     home: str = '/root'
     permission_profile: str = 'poc_run'
     disabled_features: tuple = DISABLED_FEATURES

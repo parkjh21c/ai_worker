@@ -161,7 +161,6 @@ def build_tool_specs(cfg):
              action_schema({'position_m': number('Absolute lift_joint in meters.', *lift)})),
     ]
 
-    # The mobile base tool exists only with a base: section (Gazebo config).
     if 'base' in cfg:
         motion = cfg['base']
         lin, ang = motion['max_lin_mps'], motion['max_ang_rps']

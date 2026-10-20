@@ -721,12 +721,12 @@ class RobotTools:
             after_stamp_s,
         )
 
-        status = 'arrived' if arrival['arrived'] else 'timeout'
-        reason = (
-            f'{group} reached its joint targets'
-            if arrival['arrived']
-            else f'{group} did not settle before timeout'
-        )
+        status = _arrival_status(arrival)
+        reason = {
+            'arrived': f'{group} reached its joint targets',
+            'stopped': f'{group} stopped before its joint targets',
+            'timeout': f'{group} did not settle before timeout',
+        }[status]
 
         if observation_error is not None:
             reason += f'; post-action observation failed: {observation_error}'
