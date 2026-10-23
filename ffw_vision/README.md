@@ -57,15 +57,28 @@ AI Worker 카메라 영상에서 **픽셀 관측**(원본 영상 기준 u, v와 
 | 원본 영상 | `/zed/zed_node/left/image_rect_color` (왼쪽 rectified, 672×376, bgra8) |
 | camera_info | `/zed/zed_node/left/camera_info` (plumb_bob, D = 0) |
 | frame_id | `zed_left_camera_optical_frame` |
-| depth | 없음 (ZED `depth_mode: NONE`) |
+| depth | `/zed/zed_node/depth/depth_registered` (32FC1, 미터). 아래 depth 설정으로 실행했을 때만 있음 |
 
 - raw 영상과 rectified 영상의 frame_id 가 같다. 스트림 구분은 `image_topic` 으로 한다.
 - 좌표계 노드는 rectified 영상에 맞는 camera_info 의 투영 파라미터(P, D = 0)를 쓴다. raw camera_info(equidistant 왜곡)를 섞어 쓰지 않는다.
 - depth 를 연결할 때는 영상 정합, 촬영 시각, 단위를 확인한 뒤 사용한다.
 
+### ZED depth 설정 `config/zed_depth_override.yaml`
+
+bringup 의 ZED 설정(`depth_mode: NONE`)은 바꾸지 않는다. 카메라만 따로 실행할 때 이 파일로 덮어쓴다.
+
+```bash
+ros2 launch ffw_bringup camera_zed.launch.py camera_model:=zedm \
+  ros_params_override_path:=$(ros2 pkg prefix ffw_vision)/share/ffw_vision/config/zed_depth_override.yaml
+```
+
+- `depth_mode: ULTRA`. NEURAL 계열은 이 컨테이너에 TensorRT 가 없어서 쓸 수 없다.
+- `depth_stabilization: 0` 이라 위치 추적이 켜지지 않는다.
+
 ## 입력 확인 노드 `input_monitor`
 
-설정한 카메라의 영상과 camera_info 를 구독해서 주기적으로 한 줄씩 로그를 남긴다. 아무것도 발행하지 않는다.
+설정한 카메라의 영상, camera_info, depth(설정된 경우)를 구독해서 주기적으로 한 줄씩 로그를 남긴다. 아무것도 발행하지 않는다.
+영상을 받은 뒤 100 ms 가 지나면, 같은 stamp 의 camera_info 와 depth 가 있는지 판정한다.
 
 ```bash
 ros2 run ffw_vision input_monitor --ros-args \
@@ -77,7 +90,31 @@ ros2 run ffw_vision input_monitor --ros-args \
 | `OK` | 영상이 들어오고 frame_id, 크기, camera_info 짝이 모두 맞음 |
 | `NO_INPUT` | `timeout_sec` 동안 영상이 없음 |
 | `NO_CAMERA_INFO` | 영상은 오지만 이번 구간에 camera_info 가 없음 |
-| `MISMATCH` | frame_id 또는 크기가 다르거나, 같은 stamp 의 camera_info 가 없는 영상이 있음 |
+| `NO_DEPTH` | depth_topic 이 설정됐지만 이번 구간에 depth 가 없음 |
+| `MISMATCH` | frame_id·크기·depth 인코딩이 다르거나, 같은 stamp 의 camera_info·depth 가 없는 영상이 있음 |
+
+## depth 확인 도구 `depth_probe`
+
+영상과 depth 를 stamp 가 같은 것끼리 `frames` 개 모은 뒤, 영역 `roi` 의 유효 depth 비율과 거리 통계를 출력하고 PNG 를 저장한 다음 종료한다.
+
+```bash
+ros2 run ffw_vision depth_probe --ros-args \
+  --params-file $(ros2 pkg prefix ffw_vision)/share/ffw_vision/config/cameras.yaml \
+  -p roi:="[0, 0, 0, 0]" -p frames:=30
+```
+
+| 파라미터 | 기본값 | 의미 |
+|---|---|---|
+| `roi` | `[0, 0, 0, 0]` | `[u_min, v_min, u_max, v_max]` 원본 픽셀, max 는 포함 안 함. 모두 0 이면 전체 영상 |
+| `frames` | 30 | 모을 짝 개수 |
+| `min_depth`, `max_depth` | 0.1, 10.0 | 유효 범위(m). zedm.yaml 과 같음 |
+| `output_dir` | `/workspace/vision_ws/captures` | PNG 저장 위치 |
+| `timeout_sec` | 10.0 | 이 시간 안에 다 모으지 못하면 실패로 종료 |
+
+- 유효 depth: 유한하고 `min_depth` 이상 `max_depth` 이하인 값.
+- 출력: `valid_ratio`(전체), 프레임별 최소·최대 비율, 중앙값, p10, p90, `median_std`(프레임별 중앙값의 흔들림).
+- PNG: `<stamp>_<camera>_color.png`(컬러), `_depth.png`(depth 색 표시, 검정 = 무효), `_overlay.png`(둘을 반씩 겹친 것).
+  모두 50 px 격자와 좌표 숫자, roi 사각형이 그려져 있다.
 
 ## 빌드 (ai_worker 컨테이너 안)
 

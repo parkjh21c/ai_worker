@@ -1,0 +1,41 @@
+import cv2
+import numpy as np
+
+GRID_PX = 50
+GRID_COLOR = (160, 160, 160)
+TEXT_COLOR = (255, 255, 255)
+ROI_COLOR = (0, 255, 0)
+FONT = cv2.FONT_HERSHEY_PLAIN
+
+
+def draw_grid(image, step=GRID_PX):
+    out = image.copy()
+    height, width = out.shape[:2]
+    for u in range(0, width, step):
+        cv2.line(out, (u, 0), (u, height - 1), GRID_COLOR, 1)
+        cv2.putText(out, str(u), (u + 2, 10), FONT, 0.7, TEXT_COLOR, 1)
+    for v in range(step, height, step):
+        cv2.line(out, (0, v), (width - 1, v), GRID_COLOR, 1)
+        cv2.putText(out, str(v), (2, v + 10), FONT, 0.7, TEXT_COLOR, 1)
+    return out
+
+
+def draw_roi(image, roi):
+    u0, v0, u1, v1 = roi
+    out = image.copy()
+    cv2.rectangle(out, (u0, v0), (u1 - 1, v1 - 1), ROI_COLOR, 1)
+    return out
+
+
+def depth_colormap(depth, mask):
+    """Color valid depth by its 2-98 percentile range; invalid pixels stay black."""
+    out = np.zeros((*depth.shape, 3), np.uint8)
+    if not mask.any():
+        return out, float('nan'), float('nan')
+    low, high = np.percentile(depth[mask], (2, 98))
+    scaled = np.nan_to_num(np.clip((depth - low) / max(high - low, 1e-6), 0.0, 1.0))
+    colored = cv2.applyColorMap((scaled * 255).astype(np.uint8), cv2.COLORMAP_TURBO)
+    out[mask] = colored[mask]
+    text = f'{low:.2f}m (blue) - {high:.2f}m (red), black = invalid'
+    cv2.putText(out, text, (2, out.shape[0] - 4), FONT, 0.8, TEXT_COLOR, 1)
+    return out, float(low), float(high)

@@ -11,10 +11,21 @@ HEAD = {
     'frame_id': 'zed_left_camera_optical_frame',
 }
 FRAME = HEAD['frame_id']
+T0 = 10 * NS_PER_SEC
+MS = NS_PER_MS
 
 
-def make_monitor():
-    return InputMonitor(CameraConfig('head', **HEAD), timeout_ns=NS_PER_SEC)
+def make_monitor(depth_topic=''):
+    config = CameraConfig('head', **{**HEAD, 'depth_topic': depth_topic})
+    return InputMonitor(config, timeout_ns=NS_PER_SEC)
+
+
+def add_frame(monitor, stamp, rx, info=True, depth_encoding=None):
+    if info:
+        monitor.on_camera_info(stamp, FRAME, 672, 376)
+    monitor.on_image(stamp, FRAME, 672, 376, 'bgra8', rx)
+    if depth_encoding:
+        monitor.on_depth(stamp, FRAME, 672, 376, depth_encoding)
 
 
 class TestCameraConfig(unittest.TestCase):
@@ -40,62 +51,76 @@ class TestInputMonitor(unittest.TestCase):
 
     def test_paired_frames_ok(self):
         monitor = make_monitor()
-        now = 10 * NS_PER_SEC
         for i in range(3):
-            stamp = now + i * 33 * NS_PER_MS
-            monitor.on_camera_info(stamp, FRAME, 672, 376)
-            monitor.on_image(stamp, FRAME, 672, 376, 'bgra8', stamp + 5 * NS_PER_MS)
-        result = monitor.report(now + 100 * NS_PER_MS)
+            add_frame(monitor, T0 + i * 33 * MS, T0 + i * 33 * MS + 5 * MS)
+        result = monitor.report(T0 + 300 * MS)
         self.assertEqual(result['state'], 'OK')
-        self.assertEqual((result['paired'], result['unpaired']), (3, 0))
+        self.assertEqual(result['info'], (3, 3, 0, 0))
+        self.assertIsNone(result['depth'])
         self.assertAlmostEqual(result['max_interval_ms'], 33.0)
         self.assertAlmostEqual(result['latency_max_ms'], 5.0)
 
-    def test_image_before_its_camera_info_is_pending_then_paired(self):
+    def test_late_camera_info_is_still_paired(self):
         monitor = make_monitor()
-        now = 10 * NS_PER_SEC
-        monitor.on_camera_info(now, FRAME, 672, 376)
-        monitor.on_image(now, FRAME, 672, 376, 'bgra8', now)
-        monitor.on_image(now + 33 * NS_PER_MS, FRAME, 672, 376, 'bgra8', now + 33 * NS_PER_MS)
-        first = monitor.report(now + 40 * NS_PER_MS)
-        self.assertEqual((first['paired'], first['pending'], first['unpaired']), (1, 1, 0))
+        add_frame(monitor, T0, T0)
+        add_frame(monitor, T0 + 33 * MS, T0 + 33 * MS, info=False)
+        first = monitor.report(T0 + 120 * MS)
+        self.assertEqual((first['info'][1:3], first['waiting']), ((1, 0), 1))
 
-        monitor.on_camera_info(now + 33 * NS_PER_MS, FRAME, 672, 376)
-        second = monitor.report(now + 50 * NS_PER_MS)
-        self.assertEqual((second['paired'], second['pending'], second['unpaired']), (1, 0, 0))
+        monitor.on_camera_info(T0 + 33 * MS, FRAME, 672, 376)
+        second = monitor.report(T0 + 200 * MS)
+        self.assertEqual((second['info'][1:3], second['waiting']), ((1, 0), 0))
 
     def test_unpaired_image_reports_gap(self):
         monitor = make_monitor()
-        now = 10 * NS_PER_SEC
-        monitor.on_camera_info(now, FRAME, 672, 376)
-        monitor.on_camera_info(now + 40 * NS_PER_MS, FRAME, 672, 376)
-        monitor.on_image(now + 10 * NS_PER_MS, FRAME, 672, 376, 'bgra8', now + 20 * NS_PER_MS)
-        result = monitor.report(now + 50 * NS_PER_MS)
+        monitor.on_camera_info(T0, FRAME, 672, 376)
+        monitor.on_camera_info(T0 + 40 * MS, FRAME, 672, 376)
+        monitor.on_image(T0 + 10 * MS, FRAME, 672, 376, 'bgra8', T0 + 20 * MS)
+        result = monitor.report(T0 + 200 * MS)
         self.assertEqual(result['state'], 'MISMATCH')
-        self.assertEqual(result['unpaired'], 1)
-        self.assertAlmostEqual(result['max_unpaired_gap_ms'], 10.0)
+        self.assertEqual(result['info'], (2, 0, 1, 10 * MS))
 
     def test_frame_id_and_size_mismatch(self):
         monitor = make_monitor()
-        now = 10 * NS_PER_SEC
-        monitor.on_camera_info(now, FRAME, 672, 376)
-        monitor.on_image(now, 'other_frame', 1344, 376, 'bgra8', now)
-        result = monitor.report(now)
+        monitor.on_camera_info(T0, FRAME, 672, 376)
+        monitor.on_image(T0, 'other_frame', 1344, 376, 'bgra8', T0)
+        result = monitor.report(T0)
         self.assertEqual(result['state'], 'MISMATCH')
-        self.assertEqual((result['frame_id_errors'], result['size_errors']), (1, 1))
+        self.assertEqual(result['errors'], {'frame_id': 1, 'size': 1})
 
     def test_missing_camera_info(self):
         monitor = make_monitor()
         monitor.on_image(0, FRAME, 672, 376, 'bgra8', 0)
-        result = monitor.report(10 * NS_PER_MS)
-        self.assertEqual(result['state'], 'NO_CAMERA_INFO')
-        self.assertEqual(result['pending'], 1)
+        self.assertEqual(monitor.report(10 * MS)['state'], 'NO_CAMERA_INFO')
 
     def test_no_input_after_timeout(self):
         monitor = make_monitor()
         self.assertEqual(monitor.report(0)['state'], 'NO_INPUT')
         monitor.on_image(0, FRAME, 672, 376, 'bgra8', 0)
         self.assertEqual(monitor.report(2 * NS_PER_SEC)['state'], 'NO_INPUT')
+
+
+class TestDepth(unittest.TestCase):
+
+    def test_depth_paired(self):
+        monitor = make_monitor('/zed/zed_node/depth/depth_registered')
+        for i in range(2):
+            add_frame(monitor, T0 + i * 33 * MS, T0 + i * 33 * MS, depth_encoding='32FC1')
+        result = monitor.report(T0 + 300 * MS)
+        self.assertEqual(result['state'], 'OK')
+        self.assertEqual(result['depth'], (2, 2, 0, 0))
+
+    def test_missing_depth(self):
+        monitor = make_monitor('/zed/zed_node/depth/depth_registered')
+        add_frame(monitor, T0, T0)
+        self.assertEqual(monitor.report(T0 + 200 * MS)['state'], 'NO_DEPTH')
+
+    def test_depth_encoding_mismatch(self):
+        monitor = make_monitor('/zed/zed_node/depth/depth_registered')
+        add_frame(monitor, T0, T0, depth_encoding='16UC1')
+        result = monitor.report(T0 + 200 * MS)
+        self.assertEqual(result['state'], 'MISMATCH')
+        self.assertEqual(result['errors'], {'depth_encoding': 1})
 
 
 if __name__ == '__main__':

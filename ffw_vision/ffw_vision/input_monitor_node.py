@@ -5,6 +5,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.logging import get_logger
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
+from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import CameraInfo, Image
 
 
@@ -24,6 +25,9 @@ class InputMonitorNode(Node):
         self.create_subscription(
             CameraInfo, self.config.camera_info_topic, self.on_camera_info,
             qos_profile_sensor_data)
+        if self.config.depth_topic:
+            self.create_subscription(
+                Image, self.config.depth_topic, self.on_depth, qos_profile_sensor_data)
         self.create_timer(self.get_parameter('report_period_sec').value, self.on_report)
         self.get_logger().info(f'monitoring {self.config}')
 
@@ -39,6 +43,11 @@ class InputMonitorNode(Node):
         self.monitor.on_camera_info(
             stamp_to_ns(msg.header.stamp), msg.header.frame_id, msg.width, msg.height)
 
+    def on_depth(self, msg):
+        self.monitor.on_depth(
+            stamp_to_ns(msg.header.stamp), msg.header.frame_id, msg.width, msg.height,
+            msg.encoding)
+
     def on_report(self):
         result = self.monitor.report(self.now_ns())
         text = format_report(result)
@@ -49,7 +58,8 @@ class InputMonitorNode(Node):
 
 
 def main(args=None):
-    rclpy.init(args=args)
+    # Ctrl+C raises KeyboardInterrupt only; shutdown happens once below
+    rclpy.init(args=args, signal_handler_options=SignalHandlerOptions.NO)
     try:
         node = InputMonitorNode()
     except ValueError as error:

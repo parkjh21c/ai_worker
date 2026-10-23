@@ -23,6 +23,7 @@ setup(
     license='Apache 2.0',
     entry_points={
         'console_scripts': [
+            'depth_probe = ffw_vision.depth_probe_node:main',
             'input_monitor = ffw_vision.input_monitor_node:main',
         ],
     },

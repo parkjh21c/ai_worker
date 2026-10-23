@@ -9,7 +9,7 @@
         image_topic: /zed/zed_node/left/image_rect_color
         stream_type: rectified  # raw or rectified
         camera_info_topic: /zed/zed_node/left/camera_info
-        depth_topic: ""  # ZED depth_mode NONE
+        depth_topic: /zed/zed_node/depth/depth_registered  # only with zed_depth_override.yaml
         frame_id: zed_left_camera_optical_frame
 
       left_wrist:  # not mounted
