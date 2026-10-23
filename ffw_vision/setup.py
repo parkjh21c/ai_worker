@@ -12,6 +12,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml', 'README.md']),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
+        ('share/' + package_name + '/web', glob('web/*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -25,6 +26,7 @@ setup(
         'console_scripts': [
             'depth_probe = ffw_vision.depth_probe_node:main',
             'input_monitor = ffw_vision.input_monitor_node:main',
+            'web_select = ffw_vision.web_select_node:main',
         ],
     },
 )

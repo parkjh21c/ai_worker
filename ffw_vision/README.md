@@ -93,6 +93,31 @@ ros2 run ffw_vision input_monitor --ros-args \
 | `NO_DEPTH` | depth_topic 이 설정됐지만 이번 구간에 depth 가 없음 |
 | `MISMATCH` | frame_id·크기·depth 인코딩이 다르거나, 같은 stamp 의 camera_info·depth 가 없는 영상이 있음 |
 
+## 수동 선택 화면 `web_select`
+
+Jetson 에서 설정한 카메라 영상을 웹 페이지로 보여 주고, 클릭한 위치를 그 프레임의 원본 픽셀 (u, v) 로 바꾼다.
+영상 표시와 수동 선택만 담당하는 노드다(핵심 처리와 분리). 화면 없이 동작해야 하는 부분은 이 노드에 두지 않는다.
+
+```bash
+ros2 run ffw_vision web_select --ros-args \
+  --params-file $(ros2 pkg prefix ffw_vision)/share/ffw_vision/config/cameras.yaml
+```
+
+| 파라미터 | 기본값 | 의미 |
+|---|---|---|
+| `bind_address` | `127.0.0.1` | Jetson 밖으로 열지 않는다. PC 에서는 VS Code 포트 포워딩으로 접속 |
+| `port` | 8765 | |
+| `jpeg_quality` | 80 | 화면 전송용 압축 품질 (원본 좌표에는 영향 없음) |
+| `retention_sec` | 120 | 일시정지한 프레임의 header 를 보관하는 시간 |
+
+- 화면은 0.1 초마다 최신 프레임을 받는다. 각 프레임과 함께 stamp, frame_id, 원본 크기가 전달된다.
+- 일시정지하면 화면의 프레임과 그 stamp 가 고정된다. 클릭하면 **화면에 보이는 프레임의 stamp** 로 요청한다.
+- Jetson 은 받은 프레임의 header 를 stamp 로 보관하고 있다가 그 값으로 응답한다. 최신 프레임의 header 로 바꾸지 않는다.
+- 좌표 환산: `u = floor(x · W / 표시 폭)`, `v = floor(y · H / 표시 높이)`. 클릭한 위치 아래 원본 픽셀을 고르며, 정수 값은 그 픽셀의 중심이다.
+  화면이 축소돼 있으면 오차는 표시 픽셀 하나에 해당하는 원본 픽셀 수만큼이다. 잘라내기와 확대 표시는 하지 않는다.
+- 보관 시간이 지난 프레임이나 다른 카메라의 stamp 는 거절한다(409).
+- 현재는 결과를 화면과 로그에만 보여 준다. 관측 메시지 발행은 4단계에서 붙인다.
+
 ## depth 확인 도구 `depth_probe`
 
 영상과 depth 를 stamp 가 같은 것끼리 `frames` 개 모은 뒤, 영역 `roi` 의 유효 depth 비율과 거리 통계를 출력하고 PNG 를 저장한 다음 종료한다.

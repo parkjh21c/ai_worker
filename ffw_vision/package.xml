@@ -14,6 +14,7 @@
   <author email="jiho010920@gmail.com">Jiho Park</author>
 
   <depend>rclpy</depend>
+  <depend>ament_index_python</depend>
   <depend>ffw_vision_msgs</depend>
   <depend>sensor_msgs</depend>
 
