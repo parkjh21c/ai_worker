@@ -1,27 +1,18 @@
-# Camera input table for the vision node.
-# Empty strings mean "not confirmed yet". Fill them only with values read from
-# the robot's output (topic list, message headers), never with guesses.
+# Empty string = not confirmed on the robot yet
 /**:
   ros__parameters:
-    # Camera used when the node starts: head, left_wrist or right_wrist
     camera_id: head
 
     cameras:
       head:
         enabled: true
-        # Source image stream; (u, v) are reported in this stream's pixels
-        image_topic: ""
-        # raw or rectified
-        stream_type: ""
-        # camera_info matching image_topic (same size, same frame_id)
-        camera_info_topic: ""
-        # Depth aligned to image_topic; empty while ZED depth_mode is NONE
-        depth_topic: ""
-        # frame_id expected in image headers, checked against received messages
-        frame_id: ""
+        image_topic: /zed/zed_node/left/image_rect_color
+        stream_type: rectified  # raw or rectified
+        camera_info_topic: /zed/zed_node/left/camera_info
+        depth_topic: ""  # ZED depth_mode NONE
+        frame_id: zed_left_camera_optical_frame
 
-      # Wrist cameras are not mounted yet; structure only
-      left_wrist:
+      left_wrist:  # not mounted
         enabled: false
         image_topic: ""
         stream_type: ""
@@ -29,7 +20,7 @@
         depth_topic: ""
         frame_id: ""
 
-      right_wrist:
+      right_wrist:  # not mounted
         enabled: false
         image_topic: ""
         stream_type: ""

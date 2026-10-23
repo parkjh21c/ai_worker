@@ -50,6 +50,35 @@ AI Worker 카메라 영상에서 **픽셀 관측**(원본 영상 기준 u, v와 
 카메라마다 영상 토픽, raw/rectified 구분, camera_info 토픽, 정렬된 depth 토픽, frame_id 를 적는다.
 빈 문자열은 "아직 확인하지 않음"을 뜻한다. 로봇 출력으로 확인한 값만 채운다.
 
+### head (ZED Mini, 2026-10-23 로봇 출력으로 확인)
+
+| 항목 | 값 |
+|---|---|
+| 원본 영상 | `/zed/zed_node/left/image_rect_color` (왼쪽 rectified, 672×376, bgra8) |
+| camera_info | `/zed/zed_node/left/camera_info` (plumb_bob, D = 0) |
+| frame_id | `zed_left_camera_optical_frame` |
+| depth | 없음 (ZED `depth_mode: NONE`) |
+
+- raw 영상과 rectified 영상의 frame_id 가 같다. 스트림 구분은 `image_topic` 으로 한다.
+- 좌표계 노드는 rectified 영상에 맞는 camera_info 의 투영 파라미터(P, D = 0)를 쓴다. raw camera_info(equidistant 왜곡)를 섞어 쓰지 않는다.
+- depth 를 연결할 때는 영상 정합, 촬영 시각, 단위를 확인한 뒤 사용한다.
+
+## 입력 확인 노드 `input_monitor`
+
+설정한 카메라의 영상과 camera_info 를 구독해서 주기적으로 한 줄씩 로그를 남긴다. 아무것도 발행하지 않는다.
+
+```bash
+ros2 run ffw_vision input_monitor --ros-args \
+  --params-file $(ros2 pkg prefix ffw_vision)/share/ffw_vision/config/cameras.yaml
+```
+
+| 상태 | 의미 |
+|---|---|
+| `OK` | 영상이 들어오고 frame_id, 크기, camera_info 짝이 모두 맞음 |
+| `NO_INPUT` | `timeout_sec` 동안 영상이 없음 |
+| `NO_CAMERA_INFO` | 영상은 오지만 이번 구간에 camera_info 가 없음 |
+| `MISMATCH` | frame_id 또는 크기가 다르거나, 같은 stamp 의 camera_info 가 없는 영상이 있음 |
+
 ## 빌드 (ai_worker 컨테이너 안)
 
 `./docker/container.sh enter` 로 컨테이너에 들어간 뒤 실행한다.

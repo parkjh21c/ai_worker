@@ -21,8 +21,9 @@ setup(
     maintainer_email='jiho010920@gmail.com',
     description='AI Worker vision nodes that publish pixel observations.',
     license='Apache 2.0',
-    tests_require=['pytest'],
     entry_points={
-        'console_scripts': [],
+        'console_scripts': [
+            'input_monitor = ffw_vision.input_monitor_node:main',
+        ],
     },
 )
