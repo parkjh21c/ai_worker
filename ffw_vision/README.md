@@ -45,6 +45,41 @@ AI Worker 카메라 영상에서 **픽셀 관측**(원본 영상 기준 u, v와 
 회전, 검출 점수, 다중 검출(배열 메시지)은 검출기와 실제 출력이 정해진 뒤
 의미와 유효성 표현(값이 있는지 나타내는 표시)을 정의하고 추가한다.
 
+## 물체 관측 메시지 `ffw_vision_msgs/msg/ObjectObservationArray`
+
+자동 검출기가 한 프레임에서 찾은 물체 전체를 담는다. 검출 방식(규칙 기반, 학습 기반)과 무관하게 같은 형식이다.
+발행 토픽(예정): `/ffw_vision/<camera_id>/object_observations`.
+
+| 필드 | 의미 |
+|---|---|
+| `header` | 사용한 원본 영상의 header 그대로 (촬영 시각, 광학 frame_id) |
+| `camera_id`, `image_topic`, `image_width`, `image_height` | `PixelObservation` 과 같은 의미 |
+| `source_mode` | `SOURCE_AUTO`(2) 자동 검출, `SOURCE_MANUAL`(1) 사람이 지정 |
+| `status` | `STATUS_VALID`(1) 물체 1개 이상, `STATUS_NOT_DETECTED`(2) 처리했지만 물체 없음(`objects` 비어 있음) |
+| `objects[]` | 물체마다 `ObjectObservation` |
+
+`ObjectObservation`:
+
+| 필드 | 의미 |
+|---|---|
+| `target_label` | 대상 종류 (예: `dynamixel`) |
+| `pose_label` | task 가 정한 자세 라벨 (예: `lying`, `standing`, `unknown`) |
+| `status` | `STATUS_VALID`(1), `STATUS_AMBIGUOUS`(3) 붙어 있어 분리 확신 없음 등 |
+| `u`, `v` | 회전 상자 중심, 원본 픽셀 (정수 = 픽셀 중심) |
+| `length`, `width` | 긴 변, 짧은 변 (픽셀) |
+| `angle` | 긴 변 방향. 영상 +u 축에서 +v 쪽으로 잰 각(rad), `[-π/2, π/2)` |
+| `angle_period` | 같은 모양이 되풀이되는 회전 주기. `π` 직사각형, `π/2` 정사각형에 가까움, `0` 방향 없음 |
+| `has_score`, `score` | 검출 신뢰도. 위치·각도 정확도가 아니다 |
+
+### 수신 측(좌표계 노드) 사용 규칙
+
+1. 배열 `status` 를 먼저 본다. `STATUS_NOT_DETECTED` 면 물체가 없다는 뜻이다(입력 끊김은 `status` 토픽에서 따로 확인).
+2. 물체 `status` 가 `STATUS_AMBIGUOUS` 면 그대로 집지 말고 다시 관측하거나 사람이 판단한다.
+3. 3D 위치: `header.stamp` 시각의 TF, 같은 `image_topic` 의 camera_info, 정렬된 depth 를 쓴다.
+   depth 는 상자 가장자리를 조금 줄인 안쪽 영역의 중앙값을 쓰면 윗면 거리가 안정적이다.
+4. 회전: `angle` 은 영상 기준이다. 그리퍼 회전으로 바꿀 때는 TF 로 영상 축을 로봇 축으로 옮기고 `angle_period` 로 가까운 쪽을 고른다.
+   (오른손 관측 자세에서는 영상 +u ≈ 로봇 +x, 영상 +v ≈ 로봇 −y)
+
 ## 카메라 설정 `config/cameras.yaml`
 
 카메라마다 영상 토픽, raw/rectified 구분, camera_info 토픽, 정렬된 depth 토픽, frame_id 를 적는다.

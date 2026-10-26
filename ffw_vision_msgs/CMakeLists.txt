@@ -16,6 +16,8 @@ find_package(std_msgs REQUIRED)
 # Declare ROS messages and services
 ################################################################################
 rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/ObjectObservation.msg"
+  "msg/ObjectObservationArray.msg"
   "msg/PixelObservation.msg"
   "srv/SelectPixel.srv"
   DEPENDENCIES builtin_interfaces std_msgs
