@@ -32,6 +32,7 @@ class WebSelectNode(Node):
         self.declare_parameter('port', 8765)
         self.declare_parameter('jpeg_quality', 80)
         self.declare_parameter('retention_sec', 120.0)
+        self.declare_parameter('display_topic', '')  # same stamps as image_topic, e.g. debug_image
         self.config = load_camera_config(self)
         self.jpeg_quality = self.get_parameter('jpeg_quality').value
         self.registry = FrameRegistry(int(self.get_parameter('retention_sec').value * NS_PER_SEC))
@@ -42,8 +43,8 @@ class WebSelectNode(Node):
             self.page = page.read()
 
         self.client = self.create_client(SelectPixel, 'select_pixel')
-        self.create_subscription(
-            Image, self.config.image_topic, self.on_image, qos_profile_sensor_data)
+        display_topic = self.get_parameter('display_topic').value or self.config.image_topic
+        self.create_subscription(Image, display_topic, self.on_image, qos_profile_sensor_data)
         address =(self.get_parameter('bind_address').value, self.get_parameter('port').value)
         self.server = ThreadingHTTPServer(address, make_handler(self))
         threading.Thread(target=self.server.serve_forever, daemon=True).start()

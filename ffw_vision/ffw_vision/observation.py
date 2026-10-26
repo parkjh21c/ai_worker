@@ -1,6 +1,6 @@
 import math
 
-from ffw_vision_msgs.msg import PixelObservation
+from ffw_vision_msgs.msg import ObjectObservation, ObjectObservationArray, PixelObservation
 
 
 def make_selected_observation(config, frame, u, v, target_label=''):
@@ -23,4 +23,29 @@ def make_selected_observation(config, frame, u, v, target_label=''):
     msg.status = PixelObservation.STATUS_VALID
     msg.u = float(u)
     msg.v = float(v)
+    return msg
+
+
+def make_object_array(config, header, width, height, blobs, target_label):
+    """Build an auto-detection array; header is the source image header."""
+    msg = ObjectObservationArray()
+    msg.header = header
+    msg.camera_id = config.camera_id
+    msg.image_topic = config.image_topic
+    msg.image_width = width
+    msg.image_height = height
+    msg.source_mode = ObjectObservationArray.SOURCE_AUTO
+    msg.status = (ObjectObservationArray.STATUS_VALID if blobs
+                  else ObjectObservationArray.STATUS_NOT_DETECTED)
+    for blob in blobs:
+        obj = ObjectObservation()
+        obj.target_label = target_label
+        obj.pose_label = blob.pose_label
+        obj.status = (ObjectObservation.STATUS_AMBIGUOUS if blob.ambiguous
+                      else ObjectObservation.STATUS_VALID)
+        obj.u, obj.v = blob.u, blob.v
+        obj.length, obj.width = blob.length, blob.width
+        obj.angle, obj.angle_period = blob.angle, blob.angle_period
+        obj.has_score = False
+        msg.objects.append(obj)
     return msg

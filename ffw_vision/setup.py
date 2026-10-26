@@ -27,6 +27,7 @@ setup(
         'console_scripts': [
             'depth_probe = ffw_vision.depth_probe_node:main',
             'input_monitor = ffw_vision.input_monitor_node:main',
+            'object_detector = ffw_vision.object_detector_node:main',
             'pixel_observer = ffw_vision.pixel_observer_node:main',
             'web_select = ffw_vision.web_select_node:main',
         ],

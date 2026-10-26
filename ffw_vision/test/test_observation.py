@@ -1,9 +1,12 @@
+import math
 import unittest
 
+from ffw_vision.blob_detector import Blob
 from ffw_vision.camera_config import CameraConfig
 from ffw_vision.frame_registry import FrameInfo
-from ffw_vision.observation import make_selected_observation
-from ffw_vision_msgs.msg import PixelObservation
+from ffw_vision.observation import make_object_array, make_selected_observation
+from ffw_vision_msgs.msg import ObjectObservation, ObjectObservationArray, PixelObservation
+from std_msgs.msg import Header
 
 CONFIG = CameraConfig('head', '/zed/zed_node/left/image_rect_color', 'rectified',
                       '/zed/zed_node/left/camera_info', '', 'zed_left_camera_optical_frame')
@@ -34,6 +37,36 @@ class TestSelectedObservation(unittest.TestCase):
                      (0.0, float('inf'))):
             with self.subTest(u=u, v=v), self.assertRaises(ValueError):
                 make_selected_observation(CONFIG, FRAME, u, v)
+
+
+class TestObjectArray(unittest.TestCase):
+
+    def setUp(self):
+        self.header = Header(frame_id='zed_left_camera_optical_frame')
+        self.header.stamp.sec, self.header.stamp.nanosec = 1792740000, 123456789
+
+    def test_empty_is_not_detected(self):
+        msg = make_object_array(CONFIG, self.header, 672, 376, [], 'dynamixel')
+        self.assertEqual(msg.status, ObjectObservationArray.STATUS_NOT_DETECTED)
+        self.assertEqual(msg.source_mode, ObjectObservationArray.SOURCE_AUTO)
+        self.assertEqual(list(msg.objects), [])
+
+    def test_fields_and_header(self):
+        blobs = [Blob(10.0, 20.0, 44.0, 32.0, 0.5, math.pi, 1400, 0.03, 'lying', False),
+                 Blob(30.0, 40.0, 80.0, 46.0, -0.2, 0.0, 2300, float('nan'), 'unknown', True)]
+        msg = make_object_array(CONFIG, self.header, 672, 376, blobs, 'dynamixel')
+        self.assertEqual(msg.header, self.header)
+        self.assertEqual((msg.camera_id, msg.image_width, msg.image_height),
+                         ('head', 672, 376))
+        self.assertEqual(msg.status, ObjectObservationArray.STATUS_VALID)
+        first, second = msg.objects
+        self.assertEqual((first.target_label, first.pose_label, first.status),
+                         ('dynamixel', 'lying', ObjectObservation.STATUS_VALID))
+        self.assertEqual((first.u, first.v, first.length, first.width, first.angle),
+                         (10.0, 20.0, 44.0, 32.0, 0.5))
+        self.assertEqual(first.angle_period, math.pi)
+        self.assertFalse(first.has_score)
+        self.assertEqual(second.status, ObjectObservation.STATUS_AMBIGUOUS)
 
 
 if __name__ == '__main__':

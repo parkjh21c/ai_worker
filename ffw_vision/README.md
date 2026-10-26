@@ -48,7 +48,7 @@ AI Worker 카메라 영상에서 **픽셀 관측**(원본 영상 기준 u, v와 
 ## 물체 관측 메시지 `ffw_vision_msgs/msg/ObjectObservationArray`
 
 자동 검출기가 한 프레임에서 찾은 물체 전체를 담는다. 검출 방식(규칙 기반, 학습 기반)과 무관하게 같은 형식이다.
-발행 토픽(예정): `/ffw_vision/<camera_id>/object_observations`.
+발행 토픽: `/ffw_vision/<camera_id>/object_observations` (`object_detector`).
 
 | 필드 | 의미 |
 |---|---|
@@ -162,6 +162,7 @@ ros2 run ffw_vision web_select --ros-args \
 | `port` | 8765 | |
 | `jpeg_quality` | 80 | 화면 전송용 압축 품질 (원본 좌표에는 영향 없음) |
 | `retention_sec` | 120 | 일시정지한 프레임의 header 를 보관하는 시간 |
+| `display_topic` | `''` | 화면에 띄울 토픽. 비우면 `image_topic`. `debug_image` 처럼 원본과 stamp 가 같은 영상이어야 클릭 선택이 맞는다 |
 
 - 화면은 0.1 초마다 최신 프레임을 받는다. 각 프레임과 함께 stamp, frame_id, 원본 크기가 전달된다.
 - 일시정지하면 화면의 프레임과 그 stamp 가 고정된다. 클릭하면 **화면에 보이는 프레임의 stamp** 로 요청한다.
@@ -195,6 +196,45 @@ ros2 launch ffw_vision manual_select.launch.py            # camera_id:=head, por
 ```
 
 두 노드가 `/ffw_vision/<camera_id>` 아래에서 같은 설정으로 실행된다. 카메라마다 다른 namespace 를 쓰므로 이름이 겹치지 않는다.
+
+## 자동 검출 `object_detector` (규칙 기반)
+
+컬러와 정렬된 depth 를 stamp 가 같은 것끼리 짝지어 프레임마다 처리하고, 찾은 물체 전체를 `ObjectObservationArray` 로 발행한다.
+depth_topic 이 없는 카메라는 컬러만 쓴다(`pose_label` 은 `unknown`).
+
+| 이름 (namespace `/ffw_vision/<camera_id>`) | 종류 | 내용 |
+|---|---|---|
+| `object_observations` | 발행 `ffw_vision_msgs/ObjectObservationArray` | 원본 header 그대로, 물체가 없으면 `STATUS_NOT_DETECTED` |
+| `debug_image` | 발행 `sensor_msgs/Image` (bgr8) | 결과를 그린 영상. 원본 header 그대로 |
+
+처리 순서: ① `roi` 안에서 ② 어둡거나(`dark_v_max`) 채도가 낮고 밝지 않은(`gray_s_max`, `gray_v_max`) 픽셀을 물체로 본다.
+③ 덩어리마다 **주변 바닥**(물체 가장자리에서 3~13 px 떨어진 고리, 다른 물체 제외)의 depth 중앙값을 그 물체의 바닥으로 쓴다.
+고리가 50 px 보다 적으면 `roi` 전체 바닥을 쓴다. 카메라가 기울어 바닥 depth 가 위치마다 달라도 높이가 맞다.
+④ 덩어리에서 가장 높은 20 % 의 높이(윗면 높이)를 구하고, 그보다 `top_tolerance` 이내로 낮은 픽셀만 **윗면**으로 골라낸다.
+광축에서 먼 물체는 옆면도 보여 색 덩어리가 옆면 쪽으로 길어지므로, 회전 상자와 자세 높이(윗면 높이 중앙값)는 윗면으로 구한다.
+윗면이 덩어리의 `min_top_ratio` 보다 작거나 depth 가 부족하면 색 덩어리 상자를 쓰고 자세는 `unknown` 이다.
+
+| 판정 | 조건 |
+|---|---|
+| 버림 | 면적 < `min_area`, 또는 윗면 높이 < `min_height`(그림자·인쇄) |
+| `STATUS_AMBIGUOUS` | 색 덩어리 면적 > `max_single_area`, 긴 변 > `max_single_length`(붙은 물체), 또는 `roi` 경계에 닿음(잘린 물체). 상자는 색 덩어리 전체, `pose_label` = `unknown`, `angle_period` = 0 |
+| `standing` / `lying` | 높이 ≥ `standing_min_height` 이면 `standing`. 유효 depth 가 `min_depth_ratio` 보다 적으면 `unknown` |
+| `angle_period` | 긴 변 / 짧은 변 < `square_ratio` 이면 π/2, 아니면 π |
+
+- 화면 표시: 초록 = VALID, 주황 = AMBIGUOUS, 회색 = 색 덩어리 전체, 선 = 긴 변 방향, 글자 = 자세(L, S, ?) + 높이(mm), 아래 = 개수와 `roi` 전체 바닥 거리.
+- 로그(2 초마다): 물체별 `h=윗면 높이 중앙값/윗면 높이(mm) f=주변 바닥(m) shift=색 덩어리 중심과의 거리(px) a=면적(px)`.
+- `has_score` 는 false 다(규칙 기반이라 신뢰도 값이 없다).
+- `pose_label`(`lying`, `standing`)은 **참고용 추정**이다. 광축에서 먼 쪽(영상 왼쪽)에서는 세움 높이가 낮게 나와 틀릴 수 있다.
+  물체 높이가 필요하면 좌표계 노드가 중심점 depth 로 구한 3D 위치를 쓴다.
+- 파지 방향(수신 측 규칙): 짧은 축 = `angle + π/2` 를 가로질러 잡는다. `angle_period` 가 π/2 면 거의 정사각형이라 두 축 모두 가능하다.
+- task 설정은 `config/dynamixel_basket.yaml` 에 모은다(대상 이름, 영역, 기준값). `roi` 는 오른손 관측 자세 `observe_top_h35` + 리프트 -0.05 에서만 맞다.
+
+```bash
+ros2 launch ffw_vision auto_detect.launch.py              # camera_id:=right_wrist, task_file:=dynamixel_basket.yaml 기본
+ros2 topic echo /ffw_vision/right_wrist/object_observations --once
+```
+
+`object_detector`, `pixel_observer`, `web_select`(화면 = `debug_image`)가 함께 실행된다. 브라우저 클릭 선택도 그대로 쓸 수 있다.
 
 ## depth 확인 도구 `depth_probe`
 
