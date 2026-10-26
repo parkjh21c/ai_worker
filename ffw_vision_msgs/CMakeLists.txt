@@ -9,14 +9,16 @@ project(ffw_vision_msgs)
 ################################################################################
 find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(builtin_interfaces REQUIRED)
 find_package(std_msgs REQUIRED)
 
 ################################################################################
-# Declare ROS messages
+# Declare ROS messages and services
 ################################################################################
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PixelObservation.msg"
-  DEPENDENCIES std_msgs
+  "srv/SelectPixel.srv"
+  DEPENDENCIES builtin_interfaces std_msgs
 )
 
 ################################################################################

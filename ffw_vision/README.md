@@ -116,7 +116,32 @@ ros2 run ffw_vision web_select --ros-args \
 - 좌표 환산: `u = floor(x · W / 표시 폭)`, `v = floor(y · H / 표시 높이)`. 클릭한 위치 아래 원본 픽셀을 고르며, 정수 값은 그 픽셀의 중심이다.
   화면이 축소돼 있으면 오차는 표시 픽셀 하나에 해당하는 원본 픽셀 수만큼이다. 잘라내기와 확대 표시는 하지 않는다.
 - 보관 시간이 지난 프레임이나 다른 카메라의 stamp 는 거절한다(409).
-- 현재는 결과를 화면과 로그에만 보여 준다. 관측 메시지 발행은 4단계에서 붙인다.
+- 계산한 (u, v) 와 프레임 stamp 를 `pixel_observer` 의 `select_pixel` 서비스로 보낸다. 서비스가 없으면 503 을 돌려준다.
+
+## 핵심 노드 `pixel_observer`
+
+화면 없이 동작한다. 설정한 카메라 영상의 header 를 stamp 로 보관하고, 선택 요청을 검증한 뒤 관측을 발행한다.
+자동 검출을 붙일 때도 이 노드를 그대로 쓴다.
+
+| 이름 (namespace `/ffw_vision/<camera_id>`) | 종류 | 내용 |
+|---|---|---|
+| `pixel_observation` | 발행 `ffw_vision_msgs/PixelObservation` | 선택한 프레임의 header 와 원본 (u, v) |
+| `status` | 발행 `diagnostic_msgs/DiagnosticArray` (1 Hz) | 입력 상태. 관측과 분리 |
+| `select_pixel` | 서비스 `ffw_vision_msgs/SelectPixel` | camera_id, 프레임 stamp, u, v 로 요청 |
+
+- 거절 조건: camera_id 가 다름, 보관 중이 아닌 stamp(`retention_sec`, 기본 120 초), u·v 가 영상 밖이거나 유한하지 않음.
+  거절하면 관측을 발행하지 않고, 응답 `message` 에 이유를 담는다.
+- 상태: `level` OK(0) = 정상, WARN(1) = camera_info 없음·불일치, ERROR(2) = `NO_INPUT`(1 초 동안 영상 없음).
+  `message` 에 상태 이름이 들어 있고, `values` 에 수신 주기, 마지막 영상 stamp, 오류 개수가 들어 있다.
+- 입력이 끊겨도 보관 중인 프레임에 대한 선택은 받아들인다. 그 프레임은 실제로 촬영된 것이기 때문이다.
+
+## 함께 실행
+
+```bash
+ros2 launch ffw_vision manual_select.launch.py            # camera_id:=head, port:=8765 기본
+```
+
+두 노드가 `/ffw_vision/<camera_id>` 아래에서 같은 설정으로 실행된다. 카메라마다 다른 namespace 를 쓰므로 이름이 겹치지 않는다.
 
 ## depth 확인 도구 `depth_probe`
 

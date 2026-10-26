@@ -32,3 +32,6 @@ class FrameRegistry:
 
     def get(self, stamp_ns):
         return self.frames.get(stamp_ns)
+
+    def latest(self):
+        return next(reversed(self.frames.values()), None)

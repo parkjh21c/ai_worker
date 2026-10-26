@@ -10,6 +10,7 @@ from ffw_vision.depth_stats import color_from_msg
 from ffw_vision.display_mapping import display_to_source
 from ffw_vision.frame_registry import FrameInfo, FrameRegistry
 from ffw_vision.input_check import NS_PER_SEC
+from ffw_vision_msgs.srv import SelectPixel
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.logging import get_logger
@@ -18,9 +19,11 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import Image
 
+SERVICE_TIMEOUT_SEC = 2.0
+
 
 class WebSelectNode(Node):
-    """Browser view of one camera; maps clicks to source pixels of the shown frame."""
+    """Browser view of one camera; sends clicks on the shown frame to pixel_observer."""
 
     def __init__(self):
         super().__init__('web_select')
@@ -38,9 +41,10 @@ class WebSelectNode(Node):
         with open(page_path, 'rb') as page:
             self.page = page.read()
 
+        self.client = self.create_client(SelectPixel, 'select_pixel')
         self.create_subscription(
             Image, self.config.image_topic, self.on_image, qos_profile_sensor_data)
-        address = (self.get_parameter('bind_address').value, self.get_parameter('port').value)
+        address =(self.get_parameter('bind_address').value, self.get_parameter('port').value)
         self.server = ThreadingHTTPServer(address, make_handler(self))
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.get_logger().info(f'serving http://{address[0]}:{address[1]} for {self.config}')
@@ -72,19 +76,41 @@ class WebSelectNode(Node):
             float(request['x']), float(request['y']),
             (float(request['display_width']), float(request['display_height'])),
             (info.width, info.height))
+        response = self.call_select(info, u, v)
+        obs = response.observation
         result = {
-            'camera_id': self.config.camera_id,
-            'image_topic': self.config.image_topic,
-            'frame_id': info.frame_id,
-            'stamp_sec': info.sec,
-            'stamp_nanosec': info.nanosec,
-            'image_width': info.width,
-            'image_height': info.height,
-            'u': u,
-            'v': v,
+            'accepted': response.accepted,
+            'message': response.message,
+            'requested_u': u,
+            'requested_v': v,
+            'camera_id': obs.camera_id,
+            'image_topic': obs.image_topic,
+            'frame_id': obs.header.frame_id,
+            'stamp_sec': obs.header.stamp.sec,
+            'stamp_nanosec': obs.header.stamp.nanosec,
+            'image_width': obs.image_width,
+            'image_height': obs.image_height,
+            'u': obs.u,
+            'v': obs.v,
         }
-        self.get_logger().info(f'selected {result}')
+        self.get_logger().info(f'selection {result}')
         return result
+
+    def call_select(self, info, u, v):
+        if not self.client.service_is_ready():
+            raise ConnectionError(f'service {self.client.srv_name} is not available')
+        request = SelectPixel.Request()
+        request.camera_id = self.config.camera_id
+        request.image_stamp.sec = info.sec
+        request.image_stamp.nanosec = info.nanosec
+        request.u = u
+        request.v = v
+        done = threading.Event()
+        future = self.client.call_async(request)
+        future.add_done_callback(lambda _: done.set())
+        if not done.wait(SERVICE_TIMEOUT_SEC):
+            raise ConnectionError(f'service {self.client.srv_name} did not answer')
+        return future.result()
 
     def shutdown(self):
         self.server.shutdown()
@@ -134,6 +160,8 @@ def make_handler(node):
                 self.send_json(200, node.select(json.loads(self.rfile.read(length))))
             except LookupError as error:
                 self.send_json(409, {'error': str(error)})
+            except ConnectionError as error:
+                self.send_json(503, {'error': str(error)})
             except (ValueError, KeyError, TypeError) as error:
                 self.send_json(400, {'error': str(error)})
 

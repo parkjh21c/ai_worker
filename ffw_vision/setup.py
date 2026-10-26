@@ -13,6 +13,7 @@ setup(
         ('share/' + package_name, ['package.xml', 'README.md']),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
         ('share/' + package_name + '/web', glob('web/*')),
+        ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -26,6 +27,7 @@ setup(
         'console_scripts': [
             'depth_probe = ffw_vision.depth_probe_node:main',
             'input_monitor = ffw_vision.input_monitor_node:main',
+            'pixel_observer = ffw_vision.pixel_observer_node:main',
             'web_select = ffw_vision.web_select_node:main',
         ],
     },
