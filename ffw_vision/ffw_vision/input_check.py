@@ -3,7 +3,7 @@ from collections import deque
 
 NS_PER_SEC = 1_000_000_000
 NS_PER_MS = 1_000_000
-DEPTH_ENCODINGS = ('32FC1',)
+DEPTH_ENCODINGS = ('32FC1', '16UC1')
 
 
 def stamp_to_ns(stamp):

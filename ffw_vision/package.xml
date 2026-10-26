@@ -19,6 +19,7 @@
   <depend>sensor_msgs</depend>
   <depend>diagnostic_msgs</depend>
 
+  <exec_depend>ffw_bringup</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

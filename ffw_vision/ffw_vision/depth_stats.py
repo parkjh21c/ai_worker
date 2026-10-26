@@ -22,12 +22,17 @@ def color_from_msg(msg):
     return image[:, :, :3].copy()
 
 
-def depth_from_msg(msg):
-    """Return depth in meters as a float32 array."""
-    if msg.encoding != '32FC1':
-        raise ValueError(f'unsupported depth encoding: {msg.encoding}')
-    dtype = '>f4' if msg.is_bigendian else '<f4'
-    return _rows(msg, dtype, 1)[:, :, 0].astype(np.float32)
+def depth_from_msg(msg, depth_scale=0.001):
+    """Return depth in meters as float32; 16UC1 is multiplied by depth_scale, 0 becomes NaN."""
+    endian = '>' if msg.is_bigendian else '<'
+    if msg.encoding == '32FC1':
+        return _rows(msg, endian + 'f4', 1)[:, :, 0].astype(np.float32)
+    if msg.encoding == '16UC1':
+        raw = _rows(msg, endian + 'u2', 1)[:, :, 0]
+        depth = raw.astype(np.float32) * np.float32(depth_scale)
+        depth[raw == 0] = np.nan
+        return depth
+    raise ValueError(f'unsupported depth encoding: {msg.encoding}')
 
 
 def clip_roi(roi, width, height):

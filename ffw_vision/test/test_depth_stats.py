@@ -18,9 +18,16 @@ class TestConversion(unittest.TestCase):
         msg = make_msg('32FC1', 2, 2, 12, rows.tobytes())
         np.testing.assert_array_equal(depth_from_msg(msg), [[1.0, 2.0], [3.0, 4.0]])
 
+    def test_depth_16uc1_scaled_and_zero_invalid(self):
+        raw = np.array([[0, 1000], [250, 65535]], dtype='<u2')
+        depth = depth_from_msg(make_msg('16UC1', 2, 2, 4, raw.tobytes()), depth_scale=0.001)
+        self.assertTrue(np.isnan(depth[0, 0]))
+        np.testing.assert_allclose(depth[0, 1:], [1.0])
+        np.testing.assert_allclose(depth[1], [0.25, 65.535], rtol=1e-6)
+
     def test_depth_rejects_other_encoding(self):
         with self.assertRaises(ValueError):
-            depth_from_msg(make_msg('16UC1', 1, 1, 2, b'\x00\x00'))
+            depth_from_msg(make_msg('8UC1', 1, 1, 1, b'\x00'))
 
     def test_color_bgra_and_rgb(self):
         bgra = make_msg('bgra8', 1, 1, 4, [10, 20, 30, 255])

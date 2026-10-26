@@ -117,7 +117,7 @@ class TestDepth(unittest.TestCase):
 
     def test_depth_encoding_mismatch(self):
         monitor = make_monitor('/zed/zed_node/depth/depth_registered')
-        add_frame(monitor, T0, T0, depth_encoding='16UC1')
+        add_frame(monitor, T0, T0, depth_encoding='8UC1')
         result = monitor.report(T0 + 200 * MS)
         self.assertEqual(result['state'], 'MISMATCH')
         self.assertEqual(result['errors'], {'depth_encoding': 1})

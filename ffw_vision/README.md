@@ -63,6 +63,24 @@ AI Worker 카메라 영상에서 **픽셀 관측**(원본 영상 기준 u, v와 
 - 좌표계 노드는 rectified 영상에 맞는 camera_info 의 투영 파라미터(P, D = 0)를 쓴다. raw camera_info(equidistant 왜곡)를 섞어 쓰지 않는다.
 - depth 를 연결할 때는 영상 정합, 촬영 시각, 단위를 확인한 뒤 사용한다.
 
+### 손목 D405 (2026-10-26 로봇 출력으로 확인)
+
+| 항목 | left_wrist | right_wrist |
+|---|---|---|
+| 원본 영상 | `/camera_left/camera_left/color/image_rect_raw` | `/camera_right/camera_right/color/image_rect_raw` |
+| 크기·인코딩 | 424×240, rgb8 | 424×240, rgb8 |
+| camera_info | `…/color/camera_info` (왜곡 계수 있음 → `stream_type: raw`) | 같음 |
+| 정렬된 depth | `…/aligned_depth_to_color/image_raw` (16UC1, 컬러와 같은 크기·frame_id·K) | 같음 |
+| frame_id | `camera_left_color_optical_frame` | `camera_right_color_optical_frame` |
+
+- 정렬된 depth 는 아래 launch 로 실행할 때만 있다. bringup 기본값은 colorizer 켬, align 꺼짐이라 거리값이 나오지 않는다.
+  ```bash
+  ros2 launch ffw_vision wrist_cameras.launch.py
+  ```
+- 좌우는 `ffw_bringup/config/common/rs_serial.yaml` 의 시리얼로 정해진다. camera1 = 로봇 기준 왼손, camera2 = 오른손.
+- 두 카메라 모두 USB 2.1 로 연결되어 있다(해상도·프레임 상한이 낮음).
+- 16UC1 값의 단위는 실제 거리와 비교해 확인한다(`depth_probe` 의 `depth_scale`).
+
 ### ZED depth 설정 `config/zed_depth_override.yaml`
 
 bringup 의 ZED 설정(`depth_mode: NONE`)은 바꾸지 않는다. 카메라만 따로 실행할 때 이 파일로 덮어쓴다.
@@ -158,6 +176,7 @@ ros2 run ffw_vision depth_probe --ros-args \
 | `roi` | `[0, 0, 0, 0]` | `[u_min, v_min, u_max, v_max]` 원본 픽셀, max 는 포함 안 함. 모두 0 이면 전체 영상 |
 | `frames` | 30 | 모을 짝 개수 |
 | `min_depth`, `max_depth` | 0.1, 10.0 | 유효 범위(m). zedm.yaml 과 같음 |
+| `depth_scale` | 0.001 | 16UC1 한 단위의 미터 값. 0 은 무효로 처리 (32FC1 은 미터 그대로) |
 | `output_dir` | `/workspace/vision_ws/captures` | PNG 저장 위치 |
 | `timeout_sec` | 10.0 | 이 시간 안에 다 모으지 못하면 실패로 종료 |
 

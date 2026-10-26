@@ -26,6 +26,7 @@ class DepthProbeNode(Node):
         self.declare_parameter('frames', 30)
         self.declare_parameter('min_depth', 0.1)
         self.declare_parameter('max_depth', 10.0)
+        self.declare_parameter('depth_scale', 0.001)  # meters per 16UC1 unit
         self.declare_parameter('output_dir', '/workspace/vision_ws/captures')
         self.declare_parameter('timeout_sec', 10.0)
         self.config = load_camera_config(self)
@@ -35,6 +36,7 @@ class DepthProbeNode(Node):
         self.frames = self.get_parameter('frames').value
         self.min_depth = self.get_parameter('min_depth').value
         self.max_depth = self.get_parameter('max_depth').value
+        self.depth_scale = self.get_parameter('depth_scale').value
         self.deadline_ns = self.now_ns() + int(
             self.get_parameter('timeout_sec').value * NS_PER_SEC)
         self.images = {}
@@ -72,7 +74,7 @@ class DepthProbeNode(Node):
             del buffer[min(buffer)]
         if stamp in self.images and stamp in self.depths:
             self.last_color = self.images.pop(stamp)
-            self.depth_frames.append(depth_from_msg(self.depths.pop(stamp)))
+            self.depth_frames.append(depth_from_msg(self.depths.pop(stamp), self.depth_scale))
             if len(self.depth_frames) >= self.frames:
                 self.finish()
 
