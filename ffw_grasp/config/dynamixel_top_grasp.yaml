@@ -1,0 +1,59 @@
+# Task: DYNAMIXEL from the blue basket, top-down with the right gripper (RH-P12-RN)
+# finger sizes measured by the user 2026-10-29; finger_width is assumed
+/**:
+  ros__parameters:
+    camera_id: right_wrist
+    end_effector_frame: end_effector_r_link
+    frames: 10
+    min_frames: 7
+    max_open: 0.090
+    clearance: 0.012
+    finger_tip: 0.005  # at the tip
+    finger_thick: 0.025  # 3 cm above the tip
+    taper_height: 0.030
+    finger_max: 0.030
+    finger_width: 0.015  # across the closing axis at the tip (user 2026-10-29)
+    finger_width_root: 0.025  # ... near the gripper body
+    finger_length: 0.100  # tip to the gripper body (user); URDF says 128 mm, nearer is safer
+    # gripper body (URDF rh_p12_rn base 80 x 54 mm, user 80 x 50) and arm_r_link7 with the
+    # camera (URDF x -45..+133, y +-24; user 173 x 41, starts 155 mm up), each + 15 mm
+    # (+5 mm left the wrist very close to the basket wall, user 2026-10-29)
+    body_half_y: 0.055
+    body_x_min: -0.042
+    body_x_max: 0.042
+    link_start: 0.155
+    link_half_y: 0.039
+    link_x_min: -0.060
+    link_x_max: 0.148
+    known_short: 0.034  # DYNAMIXEL 28.5 x 34 x 46.5 mm (user 2026-10-29): opening never
+    known_long: 0.0465  # narrower than the real object (measured tops are eroded)
+    tip_below_end_effector: 0.045  # fingers 4.5 cm longer than the URDF RH-P12-RN (user 2026-10-30,
+    # was 5 cm on 2026-10-29);
+    # URDF tip is within 2 mm of end_effector_r_link at 58-70 mm opening; check in the hover test
+    max_tilt_deg: 40.0  # tilt about the closing axis, top toward the robot: the arm stays in the
+    # initial pose's elbow shape (vertical needs a 2-3 rad elbow flip); user OK 2026-10-29.
+    # 50 deg scraped the floor and crowded the wall; 30 deg bends the wrist to its limit: 40 (user)
+    grasp_depth: 0.015
+    floor_height: 0.005  # basket floor above the table the plane is fitted to
+    floor_clearance: 0.008  # lowest finger corner above the floor after closing
+    close_drop: 0.009  # URDF linkage: tips go ~6 mm further closing 60 -> 25 mm, more to 22 mm
+    long_side_poses: lying  # an eroded lying top can look square: open for 46.5 mm
+    hover_height: 0.10
+    camera_z_bias: 0.016  # camera reads the table +16 mm (0.736 vs tape 0.720); set after G3
+    arm_z_bias: 0.005  # G3 ruler at hover vs FK: 0.720 + 0.125 - (0.835 + 0.005); was 0.010 when
+    # the FK tip used 5 cm fingers (same command when vertical, tilted tips ~3 mm off the robot)
+    camera_x_bias: -0.008  # G4: grasps land a little toward the robot (user 2026-10-29);
+    # first try: aim 8 mm further from the robot, tune from the next grasps
+    camera_y_bias: 0.0
+    # blue basket outer size (notes/PLAN.md): its pose is measured from the rim each plan
+    # (wrist2 recordings: rim 321-332 x 239-243 mm)
+    basket_length: 0.32
+    basket_width: 0.24
+    basket_height: 0.075
+    # scene walls for MoveIt, read by tools/pick_moveit.py (not node parameters): the walls
+    # slope from the inner size at the floor to the inner size at the rim (ruler, user
+    # 2026-10-30; depth could not see the near walls' inner faces), floor thickness = floor_height
+    basket_inner_top: [0.295, 0.210]
+    basket_inner_floor: [0.260, 0.180]
+    basket_wall: 0.010
+    basket_wall_height: 0.08  # scene walls a little above the real rim (user 2026-10-30)
