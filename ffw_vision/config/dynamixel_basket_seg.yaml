@@ -1,0 +1,15 @@
+# Task: one DYNAMIXEL in the blue basket, right_wrist at the initial pose
+# (right arm [1.05, 0, 0, -2.27, 0, 0.35, 0], lift -0.1); thresholds from wrist2/test recordings (2026-10-29)
+/**:
+  ros__parameters:
+    camera_id: right_wrist
+    target_label: dynamixel
+    depth_scale: 0.001
+    detector: yolo_seg
+    model_path: /workspace/vision_ws/runs/dyn_seg_n/weights/best.pt  # trained outside the repo
+    imgsz: 448
+    conf: 0.5  # true detections scored 0.58 or more on val
+    mask_erode_px: 5
+    standing_min_height: 0.042  # lying 28-39 mm, standing 44-53 mm above the table
+    max_single_length: 0.056
+    max_single_width: 0.040

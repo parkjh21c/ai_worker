@@ -5,7 +5,9 @@ from ffw_vision.blob_detector import Blob
 from ffw_vision.camera_config import CameraConfig
 from ffw_vision.frame_registry import FrameInfo
 from ffw_vision.observation import make_object_array, make_selected_observation
+from ffw_vision.seg_detector import SegObject
 from ffw_vision_msgs.msg import ObjectObservation, ObjectObservationArray, PixelObservation
+import numpy as np
 from std_msgs.msg import Header
 
 CONFIG = CameraConfig('head', '/zed/zed_node/left/image_rect_color', 'rectified',
@@ -66,7 +68,22 @@ class TestObjectArray(unittest.TestCase):
                          (10.0, 20.0, 44.0, 32.0, 0.5))
         self.assertEqual(first.angle_period, math.pi)
         self.assertFalse(first.has_score)
+        self.assertTrue(math.isnan(first.top_height))
+        self.assertFalse(msg.has_support_plane)
         self.assertEqual(second.status, ObjectObservation.STATUS_AMBIGUOUS)
+
+    def test_seg_objects_carry_score_height_and_plane(self):
+        obj = SegObject(250.0, 105.0, 30.0, 26.0, 0.3, math.pi / 2, 'standing', False, 0.84,
+                        0.049, 0.027, 0.025, np.zeros((4, 1, 2), np.int32))
+        plane = (np.array([0.0, -0.7, -0.7]), 0.262)
+        msg = make_object_array(CONFIG, self.header, 424, 240, [obj], 'dynamixel', plane)
+        self.assertTrue(msg.has_support_plane)
+        self.assertEqual(list(msg.support_plane), [0.0, -0.7, -0.7, 0.262])
+        (out,) = msg.objects
+        self.assertTrue(out.has_score)
+        self.assertAlmostEqual(out.score, 0.84, places=5)
+        self.assertAlmostEqual(out.top_height, 0.049)
+        self.assertEqual((out.u, out.v, out.pose_label), (250.0, 105.0, 'standing'))
 
 
 if __name__ == '__main__':

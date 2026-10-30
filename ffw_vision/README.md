@@ -4,7 +4,8 @@ AI Worker 카메라 영상에서 **픽셀 관측**(원본 영상 기준 u, v와 
 3차원 좌표 계산, 파지, 모션은 이 패키지의 범위가 아니다. 그 작업은 후속 좌표계 노드가 맡는다.
 
 - `ffw_vision_msgs`: 관측 메시지 정의 (`PixelObservation`)
-- `ffw_vision`: Vision 노드. 현재는 패키지 골격과 카메라 설정 틀만 있다.
+- `ffw_vision`: Vision 노드 (수동 선택, 자동 검출)
+- 좌표·파지(픽셀 → base_link, 파지 자세)는 `ffw_grasp` 패키지
 
 ## 관측 메시지 `ffw_vision_msgs/msg/PixelObservation`
 
@@ -56,6 +57,7 @@ AI Worker 카메라 영상에서 **픽셀 관측**(원본 영상 기준 u, v와 
 | `camera_id`, `image_topic`, `image_width`, `image_height` | `PixelObservation` 과 같은 의미 |
 | `source_mode` | `SOURCE_AUTO`(2) 자동 검출, `SOURCE_MANUAL`(1) 사람이 지정 |
 | `status` | `STATUS_VALID`(1) 물체 1개 이상, `STATUS_NOT_DETECTED`(2) 처리했지만 물체 없음(`objects` 비어 있음) |
+| `has_support_plane`, `support_plane` | 물체가 놓인 면(탁자), `header.frame_id` 기준 `[nx, ny, nz, d]`. `n · p + d` = 면 위 높이, 단위 법선은 카메라 쪽. 측정한 검출기만 채운다 |
 | `objects[]` | 물체마다 `ObjectObservation` |
 
 `ObjectObservation`:
@@ -70,6 +72,7 @@ AI Worker 카메라 영상에서 **픽셀 관측**(원본 영상 기준 u, v와 
 | `angle` | 긴 변 방향. 영상 +u 축에서 +v 쪽으로 잰 각(rad), `[-π/2, π/2)` |
 | `angle_period` | 같은 모양이 되풀이되는 회전 주기. `π` 직사각형, `π/2` 정사각형에 가까움, `0` 방향 없음 |
 | `has_score`, `score` | 검출 신뢰도. 위치·각도 정확도가 아니다 |
+| `top_height` | 윗면이 `support_plane` 위로 얼마나 높은지(m). 측정 안 했으면 NaN |
 
 ### 수신 측(좌표계 노드) 사용 규칙
 
@@ -235,6 +238,36 @@ ros2 topic echo /ffw_vision/right_wrist/object_observations --once
 ```
 
 `object_detector`, `pixel_observer`, `web_select`(화면 = `debug_image`)가 함께 실행된다. 브라우저 클릭 선택도 그대로 쓸 수 있다.
+
+## 자동 검출 `object_detector` (`detector: yolo_seg`)
+
+같은 노드에서 `detector: yolo_seg` 로 바꾸면 학습한 분할 모델을 쓴다. ultralytics 는 이때만 불러온다(컨테이너에 `--no-deps` 설치, `YOLO_AUTOINSTALL=false`).
+컬러·정렬 depth·`camera_info`(렌즈 왜곡 보정)가 필요하다. 계산은 모두 카메라 광학 좌표계라 TF 를 쓰지 않는다.
+
+처리 순서: ① 가장 큰 파란 영역 = 바구니 ② 바구니 둘레 띠(탁자)의 depth 로 RANSAC 평면 → `support_plane`
+③ 모델 마스크(`conf` 이상)를 `mask_erode_px` 만큼 줄이고 파란 픽셀·바구니 테두리를 뺀다(마스크가 벽으로 번지는 것 방지)
+④ 가장 높은 `top_share` % 의 중앙값 = `top_height`, 그보다 `top_tolerance` 이내 점 = 윗면 ⑤ 윗면 점을 평면 위에서 회전 사각형으로 맞춤 → 중심·긴 변을 영상으로 투영해 `u`, `v`, `length`, `width`, `angle`
+⑤ 방향(`angle_method: edges`, 기본): 마스크(+1 px) 안 컬러 경계선의 방향을 탁자 평면(윗면 높이) 위 방향으로 바꿔 90° 로 접은 히스토그램(세기 가중)의 최댓값.
+상자의 수평 모서리(윗면 테두리, 옆면 아래 모서리, 직선 무늬)는 모두 상자 축과 평행하다. 긴 변 = 윗면 점을 그 두 축으로 쟀을 때 긴 쪽.
+경계 픽셀 < `edge_min_px` 이거나 최댓값 ±5° 에 모인 비율 < `edge_min_share` 면 윗면 점의 회전 사각형(`min_area_rect`). 로그에 ` rect` 로 표시
+(2026-10-30 녹화 75 장, 1 개 물체 41 개, 실제 YOLO 마스크: 방향 오차 중앙값 6.2° → 2.0°, 10° 넘게 틀림 15 → 3. 비율 기준을 높여 대체를 늘리면 오히려 나빠짐 → 0.15 = 거의 고르게 퍼진 경우만)
+
+| 판정 | 조건 |
+|---|---|
+| `STATUS_AMBIGUOUS` | 윗면 긴 변 > `max_single_length` 또는 짧은 변 > `max_single_width`(두 개를 한 마스크로 본 것 등). `pose_label` = `unknown` |
+| `standing` / `lying` | `top_height` ≥ `standing_min_height` 이면 `standing` |
+| `angle_period` | 윗면(mm) 긴 변 / 짧은 변 < `square_ratio` 이면 π/2 |
+
+- 수신 측: `u`, `v` 의 광선과 `support_plane` 을 `top_height` 만큼 올린 면의 교점 = 윗면 중심 3D. `angle` 방향의 가까운 픽셀도 같은 방법으로 → 긴 변 방향. 크기(m)는 양 끝 투영 거리가 `length`, `width` 가 되는 값 (`ffw_grasp` 의 `top_face`).
+- 마스크를 줄이므로 윗면 크기(mm)는 실제보다 2~3 mm 작게 나온다. 중심은 영향이 거의 없다.
+- `length`, `width` 는 윗면(mm)의 긴 변·짧은 변 **양 끝을 영상에 투영한 두 점 사이 거리**다 (기울어 보면 가까운 쪽 절반이 더 길어 보여서 한쪽만 재지 않음). 기울어 보면 `length < width` 일 수 있다. `angle` 은 실제 긴 변 방향이다.
+- 화면: 회색 = 모델 마스크, 초록/주황 = 윗면, 글자 = 자세 + 높이(mm) + 점수.
+- task 설정: `config/dynamixel_basket_seg.yaml` (초기 자세 3차, 가중치 경로는 repo 밖).
+
+```bash
+ros2 launch ffw_vision auto_detect.launch.py \
+  task_file:=$(ros2 pkg prefix ffw_vision)/share/ffw_vision/config/dynamixel_basket_seg.yaml
+```
 
 ## depth 확인 도구 `depth_probe`
 

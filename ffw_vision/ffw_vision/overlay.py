@@ -73,3 +73,19 @@ def draw_blobs(image, blobs, roi=None, floor=float('nan')):
     cv2.putText(out, f'n={len(blobs)} floor={floor_text}', (2, out.shape[0] - 4),
                 FONT, 0.9, TEXT_COLOR, 1)
     return out
+
+
+def draw_seg_objects(image, objects, plane_found):
+    """Gray = model mask outline, green/orange = top face, text = pose, height mm, score."""
+    out = image.copy()
+    for obj in objects:
+        color = AMBIGUOUS_COLOR if obj.ambiguous else VALID_COLOR
+        cv2.polylines(out, [obj.outline], True, COLOR_BOX_COLOR, 1)
+        draw_box(out, (obj.u, obj.v, obj.length, obj.width, obj.angle), color)
+        cv2.circle(out, (round(obj.u), round(obj.v)), 2, color, -1)
+        cv2.putText(out, f'{POSE_TEXT.get(obj.pose_label, "?")}{obj.plane_height * 1000:.0f}'
+                    f' {obj.score:.2f}', (round(obj.u) + 4, round(obj.v) - 4), FONT, 0.9, color, 1)
+    plane_text = 'plane ok' if plane_found else 'no plane/basket'
+    cv2.putText(out, f'n={len(objects)} {plane_text}', (2, out.shape[0] - 4), FONT, 0.9,
+                TEXT_COLOR, 1)
+    return out
