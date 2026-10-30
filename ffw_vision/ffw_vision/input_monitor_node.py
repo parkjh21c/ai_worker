@@ -8,6 +8,8 @@ from rclpy.qos import qos_profile_sensor_data
 from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import CameraInfo, Image
 
+SPIN_TIMEOUT_SEC = 0.1
+
 
 class InputMonitorNode(Node):
 
@@ -67,7 +69,9 @@ def main(args=None):
         rclpy.try_shutdown()
         return 1
     try:
-        rclpy.spin(node)
+        # wait with a timeout: without signal handlers Ctrl+C is seen only between waits
+        while rclpy.ok():
+            rclpy.spin_once(node, timeout_sec=SPIN_TIMEOUT_SEC)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass
     finally:
