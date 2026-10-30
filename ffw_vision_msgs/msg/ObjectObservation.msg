@@ -17,3 +17,5 @@ float64 angle_period  # pi: rectangle, pi/2: near square, 0: no orientation
 
 bool has_score
 float32 score  # detection confidence, not position accuracy
+
+float64 top_height  # top face above the array's support_plane, m; NaN if not measured

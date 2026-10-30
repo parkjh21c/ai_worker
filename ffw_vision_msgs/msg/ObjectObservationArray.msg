@@ -17,4 +17,9 @@ uint8 STATUS_VALID=1
 uint8 STATUS_NOT_DETECTED=2
 uint8 status
 
+# Surface the objects rest on, in header.frame_id: n . p + d = height above it,
+# unit normal n toward the camera (d > 0 = camera above the surface)
+bool has_support_plane
+float64[4] support_plane  # nx, ny, nz, d
+
 ObjectObservation[] objects
