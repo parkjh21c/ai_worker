@@ -19,11 +19,23 @@ ros2 run ffw_pick pick_moveit --check-state                        # move_group 
 
 - `--run`: 열기 → 접근(관절 보간 + 손가락 축 직선) → 닫기 → 들기 15 cm(`--lift`, 실제 자세에서 다시 계획) → 유지
 - `--release-home`: 들어 올린 자리에서 완전히 열어 놓고, 수직 10 cm(`--home-lift`) 뒤 HOME(초기 자세 3). `--cycles N` 으로 반복.
-  빈손(닫은 그리퍼가 `HOLD_BELOW` 0.94 rad 보다 더 닫힘)이면 HOME 뒤 다시 plan, 연속 2 번이면 멈춤
+  빈손(닫은 그리퍼가 `gripper_table.yaml` 의 `hold_below` 0.94 rad 보다 더 닫힘)이면 HOME 뒤 다시 plan, 연속 2 번이면 멈춤
 - `--put-back`: 유지 뒤 제자리에 내려놓고 손가락 축으로 빠져 시작 자세로
 - Ctrl+C: 지금 동작을 취소하고 그 자리에 멈춘다
 - 장면: `ffw_grasp` 가 잰 바구니(바닥 + 기울어진 벽 4)·탁자 + 손끝에 손가락 연장 상자. 손가락-벽 충돌도 검사(`--allow-finger-walls` 로 허용)
-- 로봇 모델은 `/robot_description` 에서 받는다(`--urdf 파일` 로 대신). 그리퍼 표는 `config/gripper_table.yaml`, 집기 설정은 `ffw_grasp` 의 `dynamixel_top_grasp.yaml`
+- 로봇 모델은 `/robot_description` 에서 받는다(`--urdf 파일` 로 대신). 관절 속도 한계도 여기서(URDF 4.8 rad/s)
+
+## 설정 파일
+
+| 파일 | 내용 | 옵션 |
+|---|---|---|
+| `config/arm_r.yaml` | 팔 하나: MoveIt 그룹, 기준·손끝·손목 링크, 관절·그리퍼 이름, 손가락 링크, 그리퍼 액션, movej 토픽, HOME(초기 자세 3), 관절 한계 여유, 가속·손끝 속도 한계 | `--arm` |
+| `config/pick.yaml` | 동작: `ns`, `above`, `lift`, `speed`, `accel`, `turn_window`, `budget`, `hold`, `home_lift` (같은 이름의 옵션이 이긴다), 재시도 횟수·대기, 빈손 연속 횟수, 상태 비교 허용치 | `--config` |
+| `config/gripper_table.yaml` | 그리퍼 관절 ↔ 벌림 표, 잡음 기준 `hold_below`, 닫기 명령, 열고 닫는 시간 | `--table` |
+| `ffw_grasp` `dynamixel_top_grasp.yaml` | 바구니·손가락 치수, MoveIt 장면 값(탁자, 손가락 상자 층) | `--task` |
+| `ffw_grasp` `robot_calibration.yaml` | 손끝 길이(`tip_below_end_effector`) 등 이 로봇의 보정값 (task 파일 다음에 읽어 이긴다) | `--calibration` |
+
+파일에 빠진 값이나 모르는 값이 있으면 `settings: ...` 한 줄을 내고 멈춘다. `--verbose` 는 처음에 읽은 파일과 한계를 출력한다.
 
 ## 탐색
 

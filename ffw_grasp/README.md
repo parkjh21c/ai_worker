@@ -66,13 +66,17 @@
 - 탁자 z 는 측정 평면 그대로라 손목 카메라 오차(탁자 약 +16 mm)가 포함된다. 세 보정값(`tip_below_end_effector` 그리퍼 형상, `camera_z_bias`, `arm_z_bias`)은 하나로 합치지 않는다 — 원인을 구분하기 위해 (사용자 2026-10-29). 응답 끝에 세 값이 함께 나온다.
 - 보이지 않는 곳(물체 뒤 그림자)은 장애물로 보지 않는다. 지금은 바구니에 1개만 두므로 벽만 검사 대상이다.
 - task 설정: `config/dynamixel_top_grasp.yaml` (오른손, 손끝 실측값, `finger_width` 는 가정, DYNAMIXEL 크기 28.5 × 34 × 46.5 mm → `known_short` 0.034, `known_long` 0.0465).
+  코드 기본값을 쓰던 값도 모두 이 파일에 적혀 있다(2026-11-02). `ffw_pick` 이 읽는 MoveIt 장면 값(벽 두께·높이, 탁자 크기, 손가락 상자 층)도 이 파일 끝에 있다(노드 파라미터 아님).
+- 로봇 보정: `config/robot_calibration.yaml` (`tip_below_end_effector`, `camera_x/y/z_bias`, `arm_z_bias`) — 작업 파일과 나눔. launch 인자 `calibration_file`, task 파일 다음에 읽어 이 값이 이긴다.
+- 바구니 색: `ffw_vision` 의 `config/blue_basket.yaml` (launch 인자 `basket_file`, 검출기와 같은 파일).
 
 ```bash
 ros2 launch ffw_grasp grasp_planner.launch.py
 ros2 service call /ffw_grasp/right_wrist/plan std_srvs/srv/Trigger
 ```
 
-한 번에 켜기 (bringup 다음): 손목 카메라 + 자동 검출(화면 8765) + `grasp_planner` + 파지 결과 화면(8766). Ctrl+C 한 번에 카메라까지 꺼진다.
+한 번에 켜기 (bringup 다음): 손목 카메라 + 자동 검출(화면 8765, `detect_port`) + `grasp_planner` + 파지 결과 화면(8766, `grasp_port`). Ctrl+C 한 번에 카메라까지 꺼진다.
+YOLO 가중치는 환경 변수 `FFW_VISION_MODEL` 또는 `model_path:=` 로 바꾼다(기본은 `ffw_vision` README).
 팔 컨트롤러(cyclo movej)는 포함하지 않는다.
 
 ```bash

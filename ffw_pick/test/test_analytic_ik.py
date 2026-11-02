@@ -3,14 +3,18 @@ import os
 import unittest
 
 from ffw_pick.analytic_ik import ArmIK, Line, line_points, rot, shortest_path
-from ffw_pick.kinematics import ARM_JOINTS, Chain
+from ffw_pick.config import ArmConfig, from_file
+from ffw_pick.kinematics import Chain
 import numpy as np
 
-with open(os.path.join(os.path.dirname(__file__), 'arm_r.urdf')) as f:
+HERE = os.path.dirname(__file__)
+with open(os.path.join(HERE, 'arm_r.urdf')) as f:
     URDF = f.read()
-CHAIN = Chain(URDF, 'base_link', 'end_effector_r_link')
-ARM = ArmIK(CHAIN, margin=0.003)
-HOME = [1.05, 0.0, 0.0, -2.27, 0.0, 0.35, 0.0]
+ARM_CFG = from_file(ArmConfig, os.path.join(HERE, '..', 'config', 'arm_r.yaml'))
+ARM_JOINTS = list(ARM_CFG.arm_joints)
+CHAIN = Chain(URDF, ARM_CFG.base_frame, ARM_CFG.end_effector_link)
+ARM = ArmIK(CHAIN, ARM_JOINTS, margin=ARM_CFG.joint_margin)
+HOME = list(ARM_CFG.home)
 NOW = {'lift_joint': -0.1, **dict(zip(ARM_JOINTS, HOME))}
 JUMP = 0.15
 

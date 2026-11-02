@@ -6,6 +6,7 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, SetE
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -24,6 +25,8 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'grasp_file',
             default_value=os.path.join(grasp_share, 'config', 'dynamixel_top_grasp.yaml')),
+        DeclareLaunchArgument('detect_port', default_value='8765'),
+        DeclareLaunchArgument('grasp_port', default_value='8766'),
         SetEnvironmentVariable('YOLO_AUTOINSTALL', 'false'),
         IncludeLaunchDescription(PythonLaunchDescriptionSource(
             os.path.join(vision_share, 'launch', 'wrist_cameras.launch.py'))),
@@ -31,7 +34,8 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(
                 os.path.join(vision_share, 'launch', 'auto_detect.launch.py')),
             launch_arguments={'camera_id': camera_id,
-                              'task_file': LaunchConfiguration('detect_file')}.items()),
+                              'task_file': LaunchConfiguration('detect_file'),
+                              'port': LaunchConfiguration('detect_port')}.items()),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(grasp_share, 'launch', 'grasp_planner.launch.py')),
@@ -40,6 +44,7 @@ def generate_launch_description():
         Node(
             package='ffw_vision', executable='web_select', name='grasp_view',
             namespace=['ffw_grasp/', camera_id], output='screen',
-            parameters=[cameras_file, {'camera_id': camera_id, 'port': 8766,
-                                       'display_topic': 'debug_image'}]),
+            parameters=[cameras_file, {
+                'camera_id': camera_id, 'display_topic': 'debug_image',
+                'port': ParameterValue(LaunchConfiguration('grasp_port'), value_type=int)}]),
     ])

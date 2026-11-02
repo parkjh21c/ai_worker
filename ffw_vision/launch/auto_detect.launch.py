@@ -3,9 +3,12 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+
+# YOLO weights trained outside the repo (2026-10-29); FFW_VISION_MODEL or model_path:= overrides
+DEFAULT_MODEL = '/workspace/vision_ws/runs/dyn_seg_n/weights/best.pt'
 
 
 def generate_launch_description():
@@ -22,11 +25,19 @@ def generate_launch_description():
         DeclareLaunchArgument('params_file',
                               default_value=os.path.join(config_dir, 'cameras.yaml')),
         DeclareLaunchArgument('task_file',
-                              default_value=os.path.join(config_dir, 'dynamixel_basket.yaml')),
+                              default_value=os.path.join(config_dir, 'dynamixel_basket_seg.yaml')),
+        DeclareLaunchArgument('basket_file',
+                              default_value=os.path.join(config_dir, 'blue_basket.yaml')),
+        DeclareLaunchArgument('model_path',
+                              default_value=EnvironmentVariable('FFW_VISION_MODEL',
+                                                                default_value=DEFAULT_MODEL),
+                              description='YOLO weights for detector yolo_seg'),
         DeclareLaunchArgument('port', default_value='8765'),
         Node(
             package='ffw_vision', executable='object_detector', name='object_detector',
-            namespace=namespace, parameters=[params_file, task_file, overrides],
+            namespace=namespace,
+            parameters=[params_file, LaunchConfiguration('basket_file'), task_file,
+                        {**overrides, 'model_path': LaunchConfiguration('model_path')}],
             output='screen'),
         Node(
             package='ffw_vision', executable='pixel_observer', name='pixel_observer',

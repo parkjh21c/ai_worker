@@ -25,54 +25,29 @@ import sys
 import time
 
 from ffw_pick.analytic_ik import ArmIK, Line, line_points
-from ffw_pick.gripper import joint_for, load_table
-from ffw_pick.kinematics import ARM_JOINTS, Chain, FLIP, GRIPPER, pose_parts, tip, urdf_links
+from ffw_pick.config import (
+    ArmConfig, COMMAND_LINE, from_file, PickConfig, require, ros_parameters)
+from ffw_pick.gripper import joint_for, load_gripper
+from ffw_pick.kinematics import Chain, FLIP, pose_parts, tip, urdf_links
 import numpy as np
-import yaml
 
-GROUP = 'arm_r'
-EE_LINK = 'end_effector_r_link'
-BASE = 'base_link'
-FINGER_PARTS = ['finger_extension', 'gripper_r_rh_p12_rn_r1', 'gripper_r_rh_p12_rn_r2',
-                'gripper_r_rh_p12_rn_l1', 'gripper_r_rh_p12_rn_l2']  # vs basket walls: --allow-finger-walls
-TOUCH_LINKS = ['end_effector_r_link', 'gripper_r_rh_p12_rn_base', 'gripper_r_rh_p12_rn_r1',
-               'gripper_r_rh_p12_rn_r2', 'gripper_r_rh_p12_rn_l1', 'gripper_r_rh_p12_rn_l2']
+FINGER_OBJECT = 'finger_extension'  # id of the attached finger extension boxes
 PILZ = 'pilz_industrial_motion_planner'
-TABLE_MARGIN = 0.15  # table box reaches this far beyond the basket
-TABLE_THICK = 0.04
-FINGER_OVERLAP = 0.01  # finger boxes reach this far into the URDF fingers
-FINGER_LAYERS = (0.0, 0.01, 0.02, 0.03, 0.045)  # layer bottoms above the tip, m
-CONTROLLER_TOPIC = '/leader/joint_trajectory_command_broadcaster_right/joint_trajectory'
-GRIPPER_ACTION = '/arm_r_controller/follow_joint_trajectory'
 DESCRIPTION_TOPIC = '/robot_description'
-VEL_LIMIT = 4.8  # rad/s (URDF), scaled by --speed like the Pilz plans
-ACC_LIMIT = 5.0  # rad/s^2 (joint_limits.yaml), scaled by --accel
-CART_LIMIT = 1.0  # m/s fingertip (pilz_cartesian_limits.yaml), scaled by --speed
+# ffw_grasp task (+ calibration) keys the scene and the fingertip use
+TASK_KEYS = ('basket_length', 'basket_width', 'basket_height', 'basket_wall', 'floor_height',
+             'basket_inner_top', 'basket_inner_floor', 'table_margin', 'table_thick',
+             'tip_below_end_effector', 'finger_tip', 'finger_thick', 'taper_height',
+             'finger_max', 'finger_width', 'finger_overlap', 'finger_layers', 'hover_height')
 LINE_STEP = 0.005  # m between IK points on a straight line
 JOINT_STEP = 0.02  # rad between states of a joint-space path
 LINE_JUMP = 0.15  # rad: a bigger joint change between line points = wrist flip
 SAMPLE_DT = 0.05  # s between trajectory points
 CORNER = 6  # path points on each side of a corner that are rounded
-JOINT_MARGIN = 0.003  # rad kept from the URDF joint limits by every IK solution
 START_TRIES = 6  # line starts whose joint path collides, per grasp option, before OMPL
 BAN_TRIES = 30  # colliding solutions left out of one line before it is given up
 BOUND_SLACK = 0.02  # rad: a grasp option is skipped once its least possible joint motion is
 # this much above the best found (the search grid may undercut it by about that)
-WRIST_LINK = 'arm_r_link7'  # it and everything below it move with the fingertip pose only
-HOME = [1.05, 0.0, 0.0, -2.27, 0.0, 0.35, 0.0]  # initial pose 3; its TCP rotation ranks first
-HOME_TOL = 0.05  # rad: --release-home starts only this close to HOME
-PLAN_TRIES = 3  # plan calls after a released object (it may still be settling)
-RETRY_WAIT = 2.0  # s between those plan calls
-STATE_TOL = 0.01  # rad or m: move_group's robot state vs /joint_states before planning
-HOLD_BELOW = 0.94  # rad: fingers stopped below this = holding (2026-11-02 robot: empty closed
-# to 1.0 stops at 0.997, a lying object held at tilt 36 at 0.879; the table says ~0.74 for 28.5 mm)
-EMPTY_TRIES = 2  # --release-home: picks in a row with empty fingers before the loop stops
-
-
-def load_task(path):
-    """ros__parameters of the ffw_grasp task file."""
-    with open(path) as f:
-        return next(iter(yaml.safe_load(f).values()))['ros__parameters']
 
 
 def basket_boxes(task):
@@ -102,8 +77,9 @@ def basket_boxes(task):
         rotation = np.column_stack((x, np.cross(z, x), z))
         boxes.append((name, (wall, span, float(np.linalg.norm(top - bottom))),
                       (bottom + top) / 2 + x * wall / 2, rotation))
-    table = (length + 2 * TABLE_MARGIN, width + 2 * TABLE_MARGIN, TABLE_THICK)
-    boxes.append(('table', table, np.array([0.0, 0.0, -TABLE_THICK / 2]), np.eye(3)))
+    margin, thick = task['table_margin'], task['table_thick']
+    table = (length + 2 * margin, width + 2 * margin, thick)
+    boxes.append(('table', table, np.array([0.0, 0.0, -thick / 2]), np.eye(3)))
     return boxes
 
 
@@ -116,8 +92,8 @@ def finger_boxes(task, opening):
     tip, thick, taper = task['finger_tip'], task['finger_thick'], task['taper_height']
     width, root = task['finger_width'], task.get('finger_width_root') or task['finger_width']
     length = task.get('finger_length') or 1.0
-    top = below + FINGER_OVERLAP
-    edges = [h for h in FINGER_LAYERS if h < top] + [top]
+    top = below + task['finger_overlap']  # into the URDF fingers
+    edges = [h for h in task['finger_layers'] if h < top] + [top]
     boxes = []
     for low, high in zip(edges[:-1], edges[1:]):
         t = min(tip + (thick - tip) * high / taper, task['finger_max'])
@@ -139,18 +115,18 @@ def trajectory_values(traj, now):
     return out
 
 
-def summary_lines(name, samples, chain, tip_below, floor_z):
+def summary_lines(name, samples, chain, joints, tip_below, floor_z):
     """Duration, joint travel, fastest joint, lowest fingertip and the slowest interior point."""
     times = np.array([t for t, _ in samples])
-    q = np.array([[v[n] for n in ARM_JOINTS] for _, v in samples])
+    q = np.array([[v[n] for n in joints] for _, v in samples])
     travel = np.abs(q[-1] - q[0])
     rates = np.abs(np.diff(q, axis=0)) / np.maximum(np.diff(times), 1e-9)[:, None]
     speed = np.linalg.norm(rates, axis=1)  # whole arm, for finding a stop
     fastest = int(np.argmax(rates.max(axis=0)))
     tips = np.array([tip(chain, v, tip_below)[2] for _, v in samples])
     lines = [f'{name}: {times[-1]:.1f} s, {len(samples)} points, joint travel (rad) '
-             + ', '.join(f'{n[-1]}:{d:.2f}' for n, d in zip(ARM_JOINTS, travel)),
-             f'  fastest joint {ARM_JOINTS[fastest][-1]} {rates[:, fastest].max():.2f} rad/s,'
+             + ', '.join(f'{n[-1]}:{d:.2f}' for n, d in zip(joints, travel)),
+             f'  fastest joint {joints[fastest][-1]} {rates[:, fastest].max():.2f} rad/s,'
              f' lowest fingertip {(tips.min() - floor_z) * 1000:.0f} mm above the basket floor']
     inner = speed[len(speed) // 10:len(speed) - len(speed) // 10]
     if len(inner):
@@ -164,23 +140,23 @@ def turn_between(a, b):
     return math.acos(max(-1.0, min(1.0, (np.trace(a.T @ b) - 1.0) / 2.0)))
 
 
-def limit_margin(chain, values):
+def limit_margin(chain, joints, values):
     """Smallest distance of an arm joint to its URDF limit, rad."""
     return min(min(values[n] - lo, hi - values[n])
-               for n, (lo, hi) in ((n, chain.limits(n)) for n in ARM_JOINTS))
+               for n, (lo, hi) in ((n, chain.limits(n)) for n in joints))
 
 
-def joint_path(start, goal, step=JOINT_STEP):
+def joint_path(joints, start, goal, step=JOINT_STEP):
     """Straight joint-space states start -> goal (start excluded)."""
-    count = max(1, int(math.ceil(max(abs(goal[n] - start[n]) for n in ARM_JOINTS) / step)))
-    return [{**start, **{n: start[n] + (goal[n] - start[n]) * i / count for n in ARM_JOINTS}}
+    count = max(1, int(math.ceil(max(abs(goal[n] - start[n]) for n in joints) / step)))
+    return [{**start, **{n: start[n] + (goal[n] - start[n]) * i / count for n in joints}}
             for i in range(1, count + 1)]
 
 
-def round_corners(states, corners, half=CORNER):
+def round_corners(joints, states, corners, half=CORNER):
     """Joint states with each corner index replaced by a quadratic Bezier over +-half points
     (tangent at both ends, so the motion need not stop there). Returns (states, changed idx)."""
-    q = np.array([[s[n] for n in ARM_JOINTS] for s in states])
+    q = np.array([[s[n] for n in joints] for s in states])
     changed = []
     for c in corners:
         a, b = c - half, c + half
@@ -191,16 +167,17 @@ def round_corners(states, corners, half=CORNER):
             t = (i - a) / (b - a)
             q[i] = (1 - t) ** 2 * p0 + 2 * (1 - t) * t * p1 + t ** 2 * p2
             changed.append(i)
-    out = [{**s, **dict(zip(ARM_JOINTS, row))} for s, row in zip(states, q)]
+    out = [{**s, **dict(zip(joints, row))} for s, row in zip(states, q)]
     return out, changed
 
 
-def time_path(chain, states, tip_below, speed, accel, dt=SAMPLE_DT):
+def time_path(chain, joints, states, tip_below, speed, accel, limits, dt=SAMPLE_DT):
     """[(t, values, velocities)] along states from rest to rest: each step at the joint and
-    fingertip speed limits, then a quintic time scaling so no joint passes them (approx.)."""
-    q = np.array([[s[n] for n in ARM_JOINTS] for s in states])
+    fingertip speed limits, then a quintic time scaling so no joint passes them (approx.).
+    limits = (joint rad/s, joint rad/s^2, fingertip m/s), scaled by speed and accel."""
+    q = np.array([[s[n] for n in joints] for s in states])
     tips = np.array([tip(chain, s, tip_below) for s in states])
-    v, a, vc = VEL_LIMIT * speed, ACC_LIMIT * accel, CART_LIMIT * speed
+    v, a, vc = limits[0] * speed, limits[1] * accel, limits[2] * speed
     seg = np.maximum(np.abs(np.diff(q, axis=0)).max(axis=1) / v,
                      np.linalg.norm(np.diff(tips, axis=0), axis=1) / vc)
     u = np.concatenate(([0.0], np.cumsum(seg)))
@@ -213,7 +190,7 @@ def time_path(chain, states, tip_below, speed, accel, dt=SAMPLE_DT):
     pos = np.column_stack([np.interp(s, u, q[:, j]) for j in range(q.shape[1])])
     vel = np.gradient(pos, times, axis=0)
     vel[0] = vel[-1] = 0.0
-    return [(float(t), {**states[0], **dict(zip(ARM_JOINTS, p))}, list(map(float, w)))
+    return [(float(t), {**states[0], **dict(zip(joints, p))}, list(map(float, w)))
             for t, p, w in zip(times, pos, vel)]
 
 
@@ -221,19 +198,24 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--urdf', default='',
                         help='URDF file (default: the robot_description topic)')
+    parser.add_argument('--arm', default='', help='arm file (default: installed arm_r.yaml)')
+    parser.add_argument('--config', default='',
+                        help='pick settings (default: installed pick.yaml); options below win')
     parser.add_argument('--task', default='', help='ffw_grasp task file (default: installed)')
-    parser.add_argument('--ns', default='/ffw_grasp/right_wrist')
+    parser.add_argument('--calibration', default='',
+                        help='ffw_grasp robot calibration file (default: installed)')
+    parser.add_argument('--ns', help='ffw_grasp grasp_planner namespace')
     parser.add_argument('--no-plan', action='store_true',
                         help='use the last published poses instead of calling plan')
-    parser.add_argument('--above', type=float, default=0.10,
+    parser.add_argument('--above', type=float,
                         help='joint path target this far behind the hover along the finger axis')
-    parser.add_argument('--lift', type=float, default=0.15, help='straight up after closing, m')
-    parser.add_argument('--speed', type=float, default=0.1, help='velocity scaling 0-1')
-    parser.add_argument('--accel', type=float, default=0.1, help='acceleration scaling 0-1')
-    parser.add_argument('--turn-window', type=float, default=15.0,
+    parser.add_argument('--lift', type=float, help='straight up after closing, m')
+    parser.add_argument('--speed', type=float, help='velocity scaling 0-1')
+    parser.add_argument('--accel', type=float, help='acceleration scaling 0-1')
+    parser.add_argument('--turn-window', type=float,
                         help='deg: grasp options turned up to this much more than the least'
                              ' turned one are all solved, least joint motion wins')
-    parser.add_argument('--budget', type=float, default=30.0,
+    parser.add_argument('--budget', type=float,
                         help='s of approach search before giving up (stops early on success)')
     parser.add_argument('--verbose', action='store_true', help='print every tried combination')
     parser.add_argument('--allow-finger-walls', action='store_true',
@@ -248,23 +230,23 @@ def main():
                         help='with --run: after holding, release up there and return to HOME')
     parser.add_argument('--cycles', type=int, default=1,
                         help='with --release-home: picks in a row (0 = until one fails or Ctrl+C)')
-    parser.add_argument('--hold', type=float, default=2.0,
+    parser.add_argument('--hold', type=float,
                         help='s held up before --put-back or --release-home')
     parser.add_argument('--table', default='',
                         help='gripper opening table (default: installed gripper_table.yaml)')
-    parser.add_argument('--gripper-time', type=float, default=1.0, help='s to open or close')
+    parser.add_argument('--gripper-time', type=float,
+                        help='s to open or close (default: the gripper table file)')
     parser.add_argument('--check-state', action='store_true',
                         help="only compare move_group's robot state with /joint_states and exit")
     parser.add_argument('--home', action='store_true',
                         help='only take the arm to HOME (up first; asks before each move)')
-    parser.add_argument('--home-lift', type=float, default=0.10,
+    parser.add_argument('--home-lift', type=float,
                         help='m straight up before --home and --release-home go to HOME'
                              ' (0 = none)')
     parser.add_argument('--gripper', type=float, default=None,
                         help='only move the gripper to this joint value (rad, 0 = open) and exit')
-    parser.add_argument('--close-joint', type=float, default=1.0,
-                        help='gripper close command, rad: well past every object side so an'
-                             ' empty grip closes past HOLD_BELOW')
+    parser.add_argument('--close-joint', type=float,
+                        help='gripper close command, rad (default: the gripper table file)')
     args = parser.parse_args()
     if args.release_home and (args.put_back or not args.run):
         parser.error('--release-home needs --run and excludes --put-back')
@@ -291,14 +273,34 @@ def main():
     from ffw_grasp.grasp_planner import matrix_to_quat
 
     from ament_index_python.packages import get_package_share_directory
-    if not args.task:
-        args.task = os.path.join(get_package_share_directory('ffw_grasp'), 'config',
-                                 'dynamixel_top_grasp.yaml')
-    if not args.table:
-        args.table = os.path.join(get_package_share_directory('ffw_pick'), 'config',
-                                  'gripper_table.yaml')
-    task = load_task(args.task)
+
+    def installed(package, name):
+        return os.path.join(get_package_share_directory(package), 'config', name)
+    args.arm = args.arm or installed('ffw_pick', 'arm_r.yaml')
+    args.config = args.config or installed('ffw_pick', 'pick.yaml')
+    args.table = args.table or installed('ffw_pick', 'gripper_table.yaml')
+    args.task = args.task or installed('ffw_grasp', 'dynamixel_top_grasp.yaml')
+    args.calibration = args.calibration or installed('ffw_grasp', 'robot_calibration.yaml')
+    try:
+        arm_cfg = from_file(ArmConfig, args.arm)
+        pick_cfg = from_file(PickConfig, args.config)
+        gripper = load_gripper(args.table)
+        # this robot's calibration wins over a task file that still has it
+        task = {**ros_parameters(args.task), **ros_parameters(args.calibration)}
+        require(task, TASK_KEYS, f'{args.task} + {args.calibration}')
+    except (OSError, ValueError, KeyError) as error:
+        print(f'settings: {error}')
+        return 1
+    for name in COMMAND_LINE:
+        if getattr(args, name) is None:
+            setattr(args, name, getattr(pick_cfg, name))
+    if args.gripper_time is None:
+        args.gripper_time = gripper.move_time
+    if args.close_joint is None:
+        args.close_joint = gripper.close_command
     tip_below = task['tip_below_end_effector']
+    arm_joints, home_pose = list(arm_cfg.arm_joints), list(arm_cfg.home)
+    finger_parts = [FINGER_OBJECT] + list(arm_cfg.finger_links)
 
     rclpy.init()
     node = rclpy.create_node('pick_moveit')
@@ -319,11 +321,18 @@ def main():
             rclpy.try_shutdown()
             return 1
         urdf = got.pop('urdf')
-    chain = Chain(urdf, BASE, EE_LINK)
-    arm = ArmIK(chain, margin=JOINT_MARGIN)
+    chain = Chain(urdf, arm_cfg.base_frame, arm_cfg.end_effector_link)
+    arm = ArmIK(chain, arm_joints, margin=arm_cfg.joint_margin)
+    # joint speed from the URDF, acceleration and fingertip speed from the arm file
+    limits = (min(chain.velocity(n) for n in arm_joints), arm_cfg.max_acceleration,
+              arm_cfg.max_fingertip_speed)
     robot_links = urdf_links(urdf)
-    wrist_part = urdf_links(urdf, WRIST_LINK) | {'finger_extension'}
-    home_rot = chain.fk(dict(zip(ARM_JOINTS, HOME)))[:3, :3]
+    wrist_part = urdf_links(urdf, arm_cfg.wrist_link) | {FINGER_OBJECT}
+    home_rot = chain.fk(dict(zip(arm_joints, home_pose)))[:3, :3]
+    if args.verbose:
+        print(f'settings: arm {args.arm}, pick {args.config}, gripper {args.table}, task'
+              f' {args.task}, calibration {args.calibration}; joint limits {limits[0]:.2f} rad/s'
+              f' {limits[1]:.2f} rad/s^2, fingertip {limits[2]:.2f} m/s')
     node.create_subscription(JointState, '/joint_states',
                              lambda m: got.update(joints=dict(zip(m.name, m.position))), 10)
     for name in ('grasp', 'hover', 'basket'):
@@ -343,10 +352,11 @@ def main():
     move_group = ActionClient(node, MoveGroup, '/move_action')
     display = node.create_publisher(DisplayTrajectory, '/display_planned_path', 1)
     execute = ActionClient(node, ExecuteTrajectory, '/execute_trajectory')
-    follow = ActionClient(node, FollowJointTrajectory, GRIPPER_ACTION)
+    follow = ActionClient(node, FollowJointTrajectory, arm_cfg.gripper_action)
     active = {}  # goal handle of the motion running now, cancelled on Ctrl+C
     commands = []  # other commands on the arm controller topic (movej, teleoperation)
-    node.create_subscription(JointTrajectory, CONTROLLER_TOPIC, lambda m: commands.append(m), 10)
+    node.create_subscription(JointTrajectory, arm_cfg.controller_topic,
+                             lambda m: commands.append(m), 10)
     scene_opening = {}  # finger boxes currently in the scene
     spent = {'checks': 0, 'check_s': 0.0, 'scene_s': 0.0}  # collision checks and scene updates
 
@@ -362,6 +372,9 @@ def main():
 
     def current():
         return {n: got['joints'][n] for n in chain.moving()}
+
+    def gripper_now():
+        return got.get('joints', {}).get(arm_cfg.gripper_joint, float('nan'))
 
     def pose(position, rotation):
         p = Pose()
@@ -379,15 +392,16 @@ def main():
         scene.robot_state.is_diff = True
         for name, dims, center, rotation in basket_boxes(task):
             obj = CollisionObject(id=f'basket_{name}', operation=CollisionObject.ADD)
-            obj.header.frame_id = BASE
+            obj.header.frame_id = arm_cfg.base_frame
             obj.pose = pose(basket_position + basket_rotation @ center,
                             basket_rotation @ rotation)
             obj.primitives = [box(dims)]
             obj.primitive_poses = [pose(np.zeros(3), np.eye(3))]
             scene.world.collision_objects.append(obj)
-        fingers = AttachedCollisionObject(link_name=EE_LINK, touch_links=TOUCH_LINKS)
-        fingers.object.id = 'finger_extension'
-        fingers.object.header.frame_id = EE_LINK
+        fingers = AttachedCollisionObject(link_name=arm_cfg.end_effector_link,
+                                          touch_links=list(arm_cfg.touch_links))
+        fingers.object.id = FINGER_OBJECT
+        fingers.object.header.frame_id = arm_cfg.end_effector_link
         if args.no_finger_boxes:  # the URDF fingers already have the real length
             fingers.object.operation = CollisionObject.REMOVE
         else:
@@ -420,7 +434,7 @@ def main():
             if n not in theirs or n not in ours:
                 rows.append(f'{n}: move_group {theirs.get(n, "missing")}, joint_states'
                             f' {ours.get(n, "missing")}')
-            elif abs(theirs[n] - ours[n]) > STATE_TOL:
+            elif abs(theirs[n] - ours[n]) > pick_cfg.state_tolerance:
                 rows.append(f'{n}: move_group {theirs[n]:+.3f}, joint_states {ours[n]:+.3f}')
         return '; '.join(rows)
 
@@ -436,7 +450,7 @@ def main():
             return False
         acm = result.scene.allowed_collision_matrix
         walls = [f'basket_{n}' for n, *_ in basket_boxes(task) if n.startswith('wall')]
-        for name in FINGER_PARTS + walls:
+        for name in finger_parts + walls:
             if name not in acm.entry_names:
                 for row in acm.entry_values:
                     row.enabled.append(False)
@@ -444,7 +458,7 @@ def main():
                 acm.entry_values.append(AllowedCollisionEntry(
                     enabled=[False] * len(acm.entry_names)))
         index = {n: i for i, n in enumerate(acm.entry_names)}
-        for f in FINGER_PARTS:
+        for f in finger_parts:
             for w in walls:
                 acm.entry_values[index[f]].enabled[index[w]] = allowed
                 acm.entry_values[index[w]].enabled[index[f]] = allowed
@@ -466,17 +480,17 @@ def main():
         c = Constraints()
         c.joint_constraints = [JointConstraint(joint_name=n, position=float(values[n]),
                                                tolerance_above=1e-3, tolerance_below=1e-3,
-                                               weight=1.0) for n in ARM_JOINTS]
+                                               weight=1.0) for n in arm_joints]
         return c
 
     def state_of(values):
         s = RobotState(is_diff=True)
-        s.joint_state.name = list(ARM_JOINTS)
-        s.joint_state.position = [float(values[n]) for n in ARM_JOINTS]
+        s.joint_state.name = list(arm_joints)
+        s.joint_state.position = [float(values[n]) for n in arm_joints]
         return s
 
     def request(planner, goal, start=None, pipeline=PILZ):
-        r = MotionPlanRequest(group_name=GROUP, pipeline_id=pipeline, planner_id=planner,
+        r = MotionPlanRequest(group_name=arm_cfg.group, pipeline_id=pipeline, planner_id=planner,
                               num_planning_attempts=1, allowed_planning_time=3.0,
                               max_velocity_scaling_factor=args.speed,
                               max_acceleration_scaling_factor=args.accel)
@@ -532,7 +546,7 @@ def main():
         for i in order:
             started = time.time()
             result = call(valid_client, GetStateValidity.Request(robot_state=state_of(states[i]),
-                                                                 group_name=GROUP))
+                                                                 group_name=arm_cfg.group))
             spent['checks'] += 1
             spent['check_s'] += time.time() - started
             if result is None:
@@ -554,22 +568,23 @@ def main():
             and (a in wrist_part or b in wrist_part) for a, b in pairs)
 
     def joints_of(values):
-        return np.array([values[n] for n in ARM_JOINTS])
+        return np.array([values[n] for n in arm_joints])
 
     def with_arm(base, q):
-        return {**base, **dict(zip(ARM_JOINTS, map(float, q)))}
+        return {**base, **dict(zip(arm_joints, map(float, q)))}
 
     def traj_states(traj, base):
         return [v for _, v in trajectory_values(traj, base)]
 
     def own_trajectory(states):
-        return sampled_trajectory(time_path(chain, states, tip_below, args.speed, args.accel))
+        return sampled_trajectory(time_path(chain, arm_joints, states, tip_below, args.speed,
+                                            args.accel, limits))
 
     def sampled_trajectory(samples):
         out = RobotTrajectory()
-        out.joint_trajectory.joint_names = list(ARM_JOINTS)
+        out.joint_trajectory.joint_names = list(arm_joints)
         for t, values, vel in samples:
-            p = JointTrajectoryPoint(positions=[float(values[n]) for n in ARM_JOINTS],
+            p = JointTrajectoryPoint(positions=[float(values[n]) for n in arm_joints],
                                      velocities=vel)
             p.time_from_start.sec = int(t)
             p.time_from_start.nanosec = int((t % 1) * 1e9)
@@ -583,7 +598,7 @@ def main():
         for part in parts:
             states += part
             corners.append(len(states) - len(part) - 1)
-        states, changed = round_corners(states, corners[1:])
+        states, changed = round_corners(arm_joints, states, corners[1:])
         bad = bad_states([states[i] for i in sorted(set(changed))], coarse=1)
         if bad:
             return None, f'rounded corner collides {bad}'
@@ -622,11 +637,11 @@ def main():
 
     def plan_home(here):
         """Segments from here to HOME: Pilz PTP, else own joint path, else OMPL (all checked)."""
-        home = {**here, **dict(zip(ARM_JOINTS, HOME))}
+        home = {**here, **dict(zip(arm_joints, home_pose))}
         traj, why = plan_sequence([(request('PTP', joint_goal(home)), 0.0)])
         if traj is not None and not bad_states(traj_states(traj, here)):
             return [traj]
-        joints = joint_path(here, home)
+        joints = joint_path(arm_joints, here, home)
         if not bad_states(joints):
             return [own_trajectory([here] + joints)]
         traj, why = plan_ompl(home, state_of(here))
@@ -643,8 +658,8 @@ def main():
         """--home: straight up, then HOME (both checked in the current planning scene)."""
         spin(2.0, lambda: 'joints' in got)
         here = current()
-        off = max(abs(here[n] - h) for n, h in zip(ARM_JOINTS, HOME))
-        if off <= HOME_TOL:
+        off = max(abs(here[n] - h) for n, h in zip(arm_joints, home_pose))
+        if off <= arm_cfg.home_tolerance:
             print(f'already at HOME ({off:.3f} rad)')
             return 0
         if not valid_client.wait_for_service(timeout_sec=5.0):
@@ -653,7 +668,7 @@ def main():
         commands.clear()
         spin(1.0)
         if commands:
-            print(f'{len(commands)} commands/s arrive on {CONTROLLER_TOPIC}: stop it first')
+            print(f'{len(commands)} commands/s arrive on {arm_cfg.controller_topic}: stop it first')
             return 1
         print(f'the arm is {off:.2f} rad from HOME; the scene is whatever move_group holds now')
         if args.home_lift > 0:
@@ -683,7 +698,7 @@ def main():
 
     def run_gripper(value, label):
         goal = FollowJointTrajectory.Goal()
-        goal.trajectory.joint_names = [GRIPPER]
+        goal.trajectory.joint_names = [arm_cfg.gripper_joint]
         point = JointTrajectoryPoint(positions=[float(value)])
         point.time_from_start.sec = int(args.gripper_time)
         point.time_from_start.nanosec = int((args.gripper_time % 1) * 1e9)
@@ -761,7 +776,7 @@ def main():
         start = joints_of(now)
 
         def start_collides(q):
-            return first_bad(joint_path(now, with_arm(now, q)))[0] is not None
+            return first_bad(joint_path(arm_joints, now, with_arm(now, q)))[0] is not None
         for target, begin in (('above', option['hover'] + args.above * z),
                               ('hover', option['hover'])):
             approach = line_points(begin, grasp, LINE_STEP)
@@ -791,16 +806,16 @@ def main():
                 states, why = free_path(line, now, False, deadline, bound)
                 if states is None:
                     return None, why, ompl
-                joints = joint_path(now, states[0])
+                joints = joint_path(arm_joints, now, states[0])
                 traj, text = None, first_bad(joints)[1]
                 if not text:
                     traj, text = own_path([joints, states[1:g + 1]], now)
                 if traj is not None:
-                    move = max(abs(states[0][n] - now[n]) for n in ARM_JOINTS)
+                    move = max(abs(states[0][n] - now[n]) for n in arm_joints)
                     path = [start] + [joints_of(v) for v in states]
                     motion = sum(float(np.abs(b - a).max()) for a, b in zip(path, path[1:]))
                     how = (f'joint path to {target} (move {move:.2f} rad, limit margin'
-                           f' {limit_margin(chain, states[0]):.3f}) + analytic IK line,'
+                           f' {limit_margin(chain, arm_joints, states[0]):.3f}) + analytic IK line,'
                            f' joint motion {motion:.2f} rad')
                     lifted = own_trajectory(states[g:]) if len(states) > g + 1 else None
                     return ([traj], how, states[g], lifted, motion), '', ompl
@@ -882,15 +897,15 @@ def main():
         if args.release_home:
             spin(2.0, lambda: 'joints' in got)
             off = max(abs(got.get('joints', {}).get(n, math.inf) - h)
-                      for n, h in zip(ARM_JOINTS, HOME))
-            if off > HOME_TOL:
+                      for n, h in zip(arm_joints, home_pose))
+            if off > arm_cfg.home_tolerance:
                 print(f'the arm is {off:.2f} rad from HOME (initial pose 3): move it there first')
                 return 1
         if not args.no_plan:
             if not plan_client.wait_for_service(timeout_sec=5.0):
                 print(f'no {args.ns}/plan: is pick_demo running?')
                 return 1
-            tries = PLAN_TRIES if cycle > 1 else 1
+            tries = pick_cfg.plan_tries if cycle > 1 else 1
             for attempt in range(1, tries + 1):
                 poses.clear()
                 for key in ('opening', 'candidates', 'info'):
@@ -903,8 +918,8 @@ def main():
                     if cycle > 1:
                         print(f'stopping: plan failed {tries} times (basket empty?)')
                     return 1
-                print(f'  plan again in {RETRY_WAIT:.0f} s ({attempt}/{tries})')
-                spin(RETRY_WAIT)
+                print(f'  plan again in {pick_cfg.retry_wait:.0f} s ({attempt}/{tries})')
+                spin(pick_cfg.retry_wait)
         spin(3.0, lambda: all(k in poses for k in ('grasp', 'hover', 'basket'))
              and 'opening' in got and 'joints' in got and 'candidates' in got and 'info' in got)
         if 'grasp' not in poses or 'hover' not in poses or 'opening' not in got:
@@ -962,9 +977,9 @@ def main():
             part = trajectory_values(seg, now)
             samples += [(t0 + t, v) for t, v in part]
             t0 += part[-1][0]
-        print('\n'.join(summary_lines('approach', samples, chain, tip_below, floor_z)))
+        print('\n'.join(summary_lines('approach', samples, chain, arm_joints, tip_below, floor_z)))
         print('\n'.join(summary_lines(f'lift ({lift_how})', trajectory_values(lift, grasp_values),
-                                      chain, tip_below, floor_z)))
+                                      chain, arm_joints, tip_below, floor_z)))
         if not args.run:
             print('plan ok: shown in RViz (Planned Path); the arm was not moved (--run to move)')
             return 0
@@ -974,16 +989,16 @@ def main():
         spin(1.0)
         if commands:
             names = ', '.join(i.node_name for i in
-                              node.get_publishers_info_by_topic(CONTROLLER_TOPIC))
-            print(f'{len(commands)} commands/s arrive on {CONTROLLER_TOPIC} (from {names};'
+                              node.get_publishers_info_by_topic(arm_cfg.controller_topic))
+            print(f'{len(commands)} commands/s arrive on {arm_cfg.controller_topic} (from {names};'
                   ' movej or teleoperation?): stop it first')
             return 1
-        table = load_table(args.table)
+        table = gripper.table
         opening = option['opening']
         open_joint = joint_for(table, opening)
         close_joint = args.close_joint  # the object stops the fingers; empty closes past it
         print(f'gripper open {opening * 1000:.0f} mm ({open_joint:.3f} rad), close command'
-              f' {close_joint:.3f} rad (holding = stopped below {HOLD_BELOW:.2f}),'
+              f' {close_joint:.3f} rad (holding = stopped below {gripper.hold_below:.2f}),'
               f' speed scaling {args.speed:.2f}')
 
         ask('open the gripper?')
@@ -996,9 +1011,10 @@ def main():
 
         def holding(label):
             # a box between the fingers stops them short of the command; empty = closed fully
-            held = got['joints'].get(GRIPPER, float('nan'))
-            yes = held < HOLD_BELOW
-            print(f'  {label}: gripper at {held:.3f} rad (holding below {HOLD_BELOW:.2f}) -> '
+            held = got['joints'].get(arm_cfg.gripper_joint, float('nan'))
+            yes = held < gripper.hold_below
+            print(f'  {label}: gripper at {held:.3f} rad'
+                  f' (holding below {gripper.hold_below:.2f}) -> '
                   + ('holding' if yes else 'EMPTY'))
             return yes
         held = holding('closed')
@@ -1058,7 +1074,7 @@ def main():
         up, up_how = plan_line(here, up_end, rotation, 'up')
         up_end_values = {**here, **dict(zip(up.joint_trajectory.joint_names,
                                             up.joint_trajectory.points[-1].positions))}
-        joints = joint_path(up_end_values, now)
+        joints = joint_path(arm_joints, up_end_values, now)
         if not bad_states(joints):
             home = own_trajectory([up_end_values] + joints)
         else:
@@ -1075,9 +1091,9 @@ def main():
     try:
         if args.gripper is not None:  # no movej needed: the arm controller's action
             spin(1.0, lambda: 'joints' in got)
-            print(f'gripper now {got.get("joints", {}).get(GRIPPER, float("nan")):.3f} rad')
+            print(f'gripper now {gripper_now():.3f} rad')
             run_gripper(args.gripper, 'gripper')
-            print(f'gripper now {got.get("joints", {}).get(GRIPPER, float("nan")):.3f} rad')
+            print(f'gripper now {gripper_now():.3f} rad')
             return 0
         mismatch = state_mismatch()
         if args.check_state:
@@ -1100,7 +1116,7 @@ def main():
             if pick_once(cycle):
                 return 1
             empty = 0 if outcome.get('held', True) else empty + 1
-            if empty >= EMPTY_TRIES:
+            if empty >= pick_cfg.empty_tries:
                 print(f'stopping: {empty} picks in a row came up empty')
                 return 1
         return 0

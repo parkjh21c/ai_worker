@@ -65,7 +65,13 @@ class GraspParams:
     basket_rim_band: float = 0.008  # rim = blue points this close to the top level
     basket_min_points: int = 300
     basket_edge_px: int = 4  # rim points this close to the image border = side cut off
-    basket_h_min: int = 95  # blue HSV, same as ffw_vision SegParams
+    basket_height_tol: float = 0.02  # m: a measured rim further from basket_height = not it
+    basket_rim_percentile: float = 97.0  # rim top level = this percentile of blue heights
+    basket_extent_percentile: float = 0.5  # rim extents leave out this percent at each end
+    basket_cut_margin: float = 0.01  # m: an extent this much under the known size may be cut
+    basket_cut_window: float = 0.02  # m: ... when rim points this near its end touch the border
+    near_radius: float = 0.3  # m: rolled grasps check the scene points this close to the object
+    basket_h_min: int = 95  # blue HSV, as ffw_vision SegParams (both get blue_basket.yaml)
     basket_h_max: int = 125
     basket_s_min: int = 120
     basket_v_min: int = 80
@@ -581,10 +587,10 @@ def roll_candidate(c, points, center, normal, top_height, params, finger_points=
     tilts: a finger whose thick upper part meets a wall leans away from it."""
     if c.reason == 'too wide':
         return c
-    near = points[np.linalg.norm(points - center, axis=1) < 0.3]  # fingers and body only
+    near = points[np.linalg.norm(points - center, axis=1) < params.near_radius]  # fingers, body
     if finger_points is None:
         finger_points = points
-    near_f = finger_points[np.linalg.norm(finger_points - center, axis=1) < 0.3]
+    near_f = finger_points[np.linalg.norm(finger_points - center, axis=1) < params.near_radius]
     step, top = math.radians(params.roll_step_deg), math.radians(params.max_roll_deg)
     rolls = [step * i for i in range(1, int(round(top / step)) + 1)]
     lean_to = np.array([params.lean_x, params.lean_y, 0.0])
@@ -635,8 +641,8 @@ def fit_basket(color_bgr, depth, k, d, rays, plane, params):
     z = depth[valid]
     points = np.column_stack((rays[valid] * z[:, None], z))
     heights = points @ normal + plane_d
-    top = float(np.percentile(heights, 97))
-    if abs(top - params.basket_height) > 0.02:
+    top = float(np.percentile(heights, params.basket_rim_percentile))
+    if abs(top - params.basket_height) > params.basket_height_tol:
         return None, (f'basket rim at {top * 1000:.0f}mm,'
                       f' expected {params.basket_height * 1000:.0f}mm')
     rim = np.abs(heights - top) < params.basket_rim_band
@@ -652,10 +658,10 @@ def fit_basket(color_bgr, depth, k, d, rays, plane, params):
     _, _, angle = cv2.minAreaRect((xy * 1000).astype(np.float32))
     t = math.radians(angle)
     axes = [np.array([math.cos(t), math.sin(t)]), np.array([-math.sin(t), math.cos(t)])]
-    spans = []
+    spans, trim = [], params.basket_extent_percentile
     for e in axes:
         s = xy @ e
-        spans.append((s, float(np.percentile(s, 0.5)), float(np.percentile(s, 99.5))))
+        spans.append((s, float(np.percentile(s, trim)), float(np.percentile(s, 100 - trim))))
     ext = [hi - lo for _, lo, hi in spans]
     size = (params.basket_length, params.basket_width)
 
@@ -667,9 +673,10 @@ def fit_basket(color_bgr, depth, k, d, rays, plane, params):
     center, cut = [], []
     for (s, lo, hi), full, name in zip(spans, size, ('long', 'short')):
         # a cut side shortens the extent; a corner touching the border alone does not
-        short = hi - lo < full - 0.01
-        low_cut = short and bool(edge[s < lo + 0.02].any())
-        high_cut = short and bool(edge[s > hi - 0.02].any())
+        short = hi - lo < full - params.basket_cut_margin
+        window = params.basket_cut_window
+        low_cut = short and bool(edge[s < lo + window].any())
+        high_cut = short and bool(edge[s > hi - window].any())
         if low_cut and not high_cut:
             center.append(hi - full / 2)
         elif high_cut and not low_cut:

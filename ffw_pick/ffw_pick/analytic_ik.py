@@ -10,7 +10,7 @@ between are filled on the same branches and the whole path is smoothed.
 import math
 import time
 
-from ffw_pick.kinematics import ARM_JOINTS, axis_matrix, transform
+from ffw_pick.kinematics import axis_matrix, transform
 import numpy as np
 
 Q7_STEP = math.radians(1.0)
@@ -41,9 +41,10 @@ def rot(axis, q):
 
 
 class ArmIK:
-    """Every IK solution of chain's arm joints (the lift and other joints stay as given)."""
+    """Every IK solution of the 7 arm joints of chain, shoulder first (the lift and other
+    joints stay as given)."""
 
-    def __init__(self, chain, joints=ARM_JOINTS, margin=0.0, q7_step=Q7_STEP):
+    def __init__(self, chain, joints, margin=0.0, q7_step=Q7_STEP):
         by_name = {j['name']: j for j in chain.joints}
         arm = [by_name[n] for n in joints]
         for j, axis in zip(arm, AXES):
@@ -407,7 +408,8 @@ class Line:
             cand = q.reshape(8, k, samples, 7).transpose(1, 0, 2, 3).reshape(k, 8 * samples, 7)
             ok = (state.reshape(8, k, samples).transpose(1, 0, 2).reshape(k, -1) == 2)
             cand_branch = np.repeat(np.arange(8), samples)
-            cost = np.abs(cand - prev[:, None]).max(axis=2) + np.abs(nxt[:, None] - cand).max(axis=2)
+            cost = (np.abs(cand - prev[:, None]).max(axis=2)
+                    + np.abs(nxt[:, None] - cand).max(axis=2))
             cost = np.where(ok, cost, np.inf)
             best = cost.argmin(axis=1)
             direct = np.abs(nxt - prev).max(axis=1)

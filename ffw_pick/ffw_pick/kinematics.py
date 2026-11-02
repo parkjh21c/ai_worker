@@ -1,12 +1,9 @@
-"""Right arm chain from the URDF: forward kinematics and the joint names, limits and frames
-the pick needs."""
+"""Arm chain from the URDF: forward kinematics, joint limits and the link sets the pick needs."""
 import math
 import xml.etree.ElementTree as ET
 
 import numpy as np
 
-ARM_JOINTS = [f'arm_r_joint{i}' for i in range(1, 8)]
-GRIPPER = 'gripper_r_joint1'
 FLIP = np.diag([-1.0, -1.0, 1.0])  # gripper is symmetric: same grasp turned 180 deg about z
 
 
@@ -58,6 +55,7 @@ class Chain:
                 'axis': floats(joint.find('axis'), 'xyz', '1 0 0'),
                 'limit': (-math.inf, math.inf) if limit is None else
                 (float(limit.get('lower', -math.inf)), float(limit.get('upper', math.inf))),
+                'velocity': math.inf if limit is None else float(limit.get('velocity', math.inf)),
             }
         self.joints = []
         link = tip
@@ -74,6 +72,10 @@ class Chain:
 
     def limits(self, name):
         return next(j['limit'] for j in self.joints if j['name'] == name)
+
+    def velocity(self, name):
+        """URDF velocity limit of a joint (inf when not given)."""
+        return next(j['velocity'] for j in self.joints if j['name'] == name)
 
     def fk(self, values):
         """Tip pose (4x4) in the root frame; joints missing from values are 0."""

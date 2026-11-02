@@ -233,7 +233,8 @@ depth_topic 이 없는 카메라는 컬러만 쓴다(`pose_label` 은 `unknown`)
 - task 설정은 `config/dynamixel_basket.yaml` 에 모은다(대상 이름, 영역, 기준값). `roi` 는 오른손 관측 자세 `observe_top_h35` + 리프트 -0.05 에서만 맞다.
 
 ```bash
-ros2 launch ffw_vision auto_detect.launch.py              # camera_id:=right_wrist, task_file:=dynamixel_basket.yaml 기본
+ros2 launch ffw_vision auto_detect.launch.py \
+  task_file:=$(ros2 pkg prefix ffw_vision)/share/ffw_vision/config/dynamixel_basket.yaml
 ros2 topic echo /ffw_vision/right_wrist/object_observations --once
 ```
 
@@ -262,11 +263,13 @@ ros2 topic echo /ffw_vision/right_wrist/object_observations --once
 - 마스크를 줄이므로 윗면 크기(mm)는 실제보다 2~3 mm 작게 나온다. 중심은 영향이 거의 없다.
 - `length`, `width` 는 윗면(mm)의 긴 변·짧은 변 **양 끝을 영상에 투영한 두 점 사이 거리**다 (기울어 보면 가까운 쪽 절반이 더 길어 보여서 한쪽만 재지 않음). 기울어 보면 `length < width` 일 수 있다. `angle` 은 실제 긴 변 방향이다.
 - 화면: 회색 = 모델 마스크, 초록/주황 = 윗면, 글자 = 자세 + 높이(mm) + 점수.
-- task 설정: `config/dynamixel_basket_seg.yaml` (초기 자세 3차, 가중치 경로는 repo 밖).
+- task 설정: `config/dynamixel_basket_seg.yaml` (초기 자세 3차, `auto_detect.launch.py` 의 기본 `task_file`).
+  바구니 색(HSV)은 `config/blue_basket.yaml`(`basket_file`) — `ffw_grasp` 의 바구니 맞추기와 같은 파일.
+- 가중치: launch 인자 `model_path`. 기본은 환경 변수 `FFW_VISION_MODEL`, 없으면 `/workspace/vision_ws/runs/dyn_seg_n/weights/best.pt`(repo 밖, 2026-10-29 학습).
 
 ```bash
-ros2 launch ffw_vision auto_detect.launch.py \
-  task_file:=$(ros2 pkg prefix ffw_vision)/share/ffw_vision/config/dynamixel_basket_seg.yaml
+ros2 launch ffw_vision auto_detect.launch.py                       # camera_id:=right_wrist, port:=8765 기본
+ros2 launch ffw_vision auto_detect.launch.py model_path:=/path/to/best.pt
 ```
 
 ## depth 확인 도구 `depth_probe`

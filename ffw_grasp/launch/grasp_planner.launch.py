@@ -19,9 +19,16 @@ def generate_launch_description():
                               default_value=os.path.join(vision_config, 'cameras.yaml')),
         DeclareLaunchArgument('task_file',
                               default_value=os.path.join(config_dir, 'dynamixel_top_grasp.yaml')),
+        DeclareLaunchArgument('calibration_file',
+                              default_value=os.path.join(config_dir, 'robot_calibration.yaml'),
+                              description='this robot: fingertip length, camera and arm biases'),
+        DeclareLaunchArgument('basket_file',
+                              default_value=os.path.join(vision_config, 'blue_basket.yaml')),
+        # the calibration comes last: it wins over a task file that still has it
         Node(
             package='ffw_grasp', executable='grasp_planner', name='grasp_planner',
             namespace=['ffw_grasp/', camera_id], output='screen',
-            parameters=[LaunchConfiguration('params_file'), LaunchConfiguration('task_file'),
+            parameters=[LaunchConfiguration('params_file'), LaunchConfiguration('basket_file'),
+                        LaunchConfiguration('task_file'), LaunchConfiguration('calibration_file'),
                         {'camera_id': camera_id}]),
     ])
