@@ -6,6 +6,7 @@
     end_effector_frame: end_effector_r_link
     frames: 10
     min_frames: 7
+    object_radius_px: 10.0  # a target this close to an object of the frame before is that object
     max_open: 0.090
     clearance: 0.012
     finger_tip: 0.005  # at the tip
@@ -30,6 +31,7 @@
     tip_below_end_effector: 0.045  # fingers 4.5 cm longer than the URDF RH-P12-RN (user 2026-10-30,
     # was 5 cm on 2026-10-29);
     # URDF tip is within 2 mm of end_effector_r_link at 58-70 mm opening; check in the hover test
+    max_roll_deg: 25.0  # only when every upright grasp is blocked (thick finger top vs a wall)
     max_tilt_deg: 40.0  # tilt about the closing axis, top toward the robot: the arm stays in the
     # initial pose's elbow shape (vertical needs a 2-3 rad elbow flip); user OK 2026-10-29.
     # 50 deg scraped the floor and crowded the wall; 30 deg bends the wrist to its limit: 40 (user)
@@ -50,10 +52,13 @@
     basket_length: 0.32
     basket_width: 0.24
     basket_height: 0.075
-    # scene walls for MoveIt, read by tools/pick_moveit.py (not node parameters): the walls
-    # slope from the inner size at the floor to the inner size at the rim (ruler, user
+    # the walls slope from the inner size at the floor to the inner size at the rim (ruler, user
     # 2026-10-30; depth could not see the near walls' inner faces), floor thickness = floor_height
     basket_inner_top: [0.295, 0.210]
     basket_inner_floor: [0.260, 0.180]
+    wall_band: 0.0  # wall points block the fingers again (user 2026-11-02, fingers hit the basket);
+    # 0.02 = wall points within 2 cm of the model do not block them (walls bulge, depth wavers)
+    # scene walls for MoveIt, read by tools/pick_moveit.py (not node parameters)
     basket_wall: 0.010
     basket_wall_height: 0.08  # scene walls a little above the real rim (user 2026-10-30)
+    basket_wall_margin: 0.0  # scene walls this much thicker inward (measured basket error)

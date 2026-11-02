@@ -1,5 +1,5 @@
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 
 import cv2
@@ -45,6 +45,9 @@ class GraspParams:
     tilt_step_deg: float = 10.0  # a blocked tilt is retried this much smaller, down to vertical
     lean_x: float = -1.0  # base direction the gripper top leans to (e.g. toward the robot)
     lean_y: float = 0.0
+    max_roll_deg: float = 0.0  # tilt about the across axis, only when every upright grasp is
+    roll_step_deg: float = 5.0  # blocked: the top leans away from one finger; 0 = off
+    roll_top_margin: float = 0.004  # m: the raised fingertip stays this far under the top face
     tip_below_end_effector: float = 0.0  # fingertip below the end effector origin at grasp opening
     camera_z_bias: float = 0.0  # camera-measured base z minus true z (kept apart from arm_z_bias)
     camera_x_bias: float = 0.0  # camera-measured base x minus true x (each kept apart)
@@ -55,6 +58,10 @@ class GraspParams:
     basket_length: float = 0.0  # basket outer size, m; 0 = no basket measurement
     basket_width: float = 0.0
     basket_height: float = 0.0
+    basket_inner_top: tuple = (0.0, 0.0)  # inner length, width at the rim (walls slope)
+    basket_inner_floor: tuple = (0.0, 0.0)  # ... at the floor
+    wall_band: float = 0.0  # m: points this close inside a basket wall (or in it) do not block
+    # the fingers (fingers may touch the walls; the body still checks them); 0 = off
     basket_rim_band: float = 0.008  # rim = blue points this close to the top level
     basket_min_points: int = 300
     basket_edge_px: int = 4  # rim points this close to the image border = side cut off
@@ -95,6 +102,9 @@ class Candidate:
     lean_base: np.ndarray  # the same direction in the base frame (horizontal)
     tip_height: float  # fingertip center above the support plane
     free_tilts: tuple = ()  # every unblocked tilt, largest first
+    roll: float = 0.0  # rad about the across axis; + = the +close_axis fingertip is higher
+    free_rolls: tuple = ()  # unblocked (tilt, roll) when no upright tilt is free
+    block_points: np.ndarray = None  # camera frame points in the more blocked finger (drawing)
 
 
 @dataclass(frozen=True)
@@ -120,7 +130,7 @@ class Grasp:
 
 @dataclass(frozen=True)
 class GraspOption:
-    """One usable candidate at one unblocked tilt, as base frame poses."""
+    """One usable candidate at one unblocked tilt (and roll), as base frame poses."""
 
     name: str
     tilt: float
@@ -130,6 +140,7 @@ class GraspOption:
     position: np.ndarray
     rotation: np.ndarray
     hover: np.ndarray
+    roll: float = 0.0  # rad about the across axis; + = the fingertip on +y (end effector) higher
 
 
 @dataclass(frozen=True)
@@ -169,6 +180,41 @@ def pick_target(targets):
     """Target with a measured height and the highest score, or None."""
     measured = [t for t in targets if math.isfinite(t.top_height)]
     return max(measured, key=lambda t: t.score) if measured else None
+
+
+def pick_object(frames, radius, min_count):
+    """Targets of one object over frames: (targets, frame indices, objects seen).
+
+    frames: per frame, the targets Vision found. Targets with a measured height are matched
+    to the objects of the frames before by center (nearest first, one per object and frame,
+    within radius px), others start a new object. The object seen in min_count frames or
+    more with the highest median score wins (the best of a single frame may change between
+    two objects). objects seen = how many were seen in min_count frames or more.
+    """
+    objects = []  # [last center, [(frame index, target)]]
+    for f, targets in enumerate(frames):
+        measured = [t for t in targets if math.isfinite(t.top_height)]
+        pairs = sorted((math.hypot(t.u - o[0][0], t.v - o[0][1]), i, j)
+                       for i, t in enumerate(measured) for j, o in enumerate(objects))
+        used_t, used_o = set(), set()
+        for distance, i, j in pairs:
+            if distance > radius:
+                break
+            if i in used_t or j in used_o:
+                continue
+            used_t.add(i)
+            used_o.add(j)
+            objects[j][0] = (measured[i].u, measured[i].v)
+            objects[j][1].append((f, measured[i]))
+        objects += [[(t.u, t.v), [(f, t)]] for i, t in enumerate(measured) if i not in used_t]
+    if not objects:
+        raise ValueError('no target in any frame')
+
+    def rank(o):
+        return len(o[1]) >= min_count, float(np.median([t.score for _, t in o[1]])), len(o[1])
+    best = max(objects, key=rank)
+    seen = sum(len(o[1]) >= min_count for o in objects)
+    return [t for _, t in best[1]], [f for f, _ in best[1]], seen
 
 
 def circular_mean(angles, period):
@@ -290,6 +336,22 @@ def finger_blocks(points, heights, center, close_axis, normal, opening, tip_heig
 
     A tilted finger runs toward lean (camera frame, in the plane) by tan(tilt) per height.
     """
+    return max(int(m.sum()) for m in finger_masks(points, heights, center, close_axis, normal,
+                                                  opening, tip_height, params, lean, tilt))
+
+
+def blocking_points(points, heights, center, close_axis, normal, opening, tip_height, params,
+                    lean=None, tilt=0.0):
+    """(points, heights above the plane) in the more blocked finger, for diagnostics."""
+    masks = finger_masks(points, heights, center, close_axis, normal, opening, tip_height,
+                         params, lean, tilt)
+    worst = max(masks, key=lambda m: m.sum())
+    return points[worst], heights[worst]
+
+
+def finger_masks(points, heights, center, close_axis, normal, opening, tip_height, params,
+                 lean=None, tilt=0.0):
+    """Scene points inside each finger's space (see finger_blocks)."""
     dz = heights - tip_height
     rel = points - center
     if tilt:
@@ -304,8 +366,8 @@ def finger_blocks(points, heights, center, close_axis, normal, opening, tip_heig
         width = width + (params.finger_width_root - width) * np.clip(
             run / params.finger_length, 0.0, 1.0)
     near = (dz > 0) & (across <= width / 2)
-    return max(int((near & (out >= 0) & (out <= thick)).sum())
-               for out in (along - opening / 2, -along - opening / 2))
+    return [near & (out >= 0) & (out <= thick)
+            for out in (along - opening / 2, -along - opening / 2)]
 
 
 def body_blocks(points, tip, x_axis, y_axis, z_axis, params):
@@ -321,6 +383,44 @@ def body_blocks(points, tip, x_axis, y_axis, z_axis, params):
     return count
 
 
+def rolled_blocks(points, tip, x_axis, y_axis, z_axis, opening, params):
+    """Most scene points inside either finger's space for any gripper frame (tip = between the
+    fingertips): the finger thickens outward along y as it runs up z."""
+    counts = []
+    for side in (1, -1):
+        rel = points - (tip + y_axis * side * opening / 2)
+        run, out, across = rel @ z_axis, side * (rel @ y_axis), np.abs(rel @ x_axis)
+        thick = np.minimum(params.finger_tip + (params.finger_thick - params.finger_tip)
+                           * run / params.taper_height, params.finger_max)
+        width = params.finger_width
+        if params.finger_width_root and params.finger_length:
+            width = width + (params.finger_width_root - width) * np.clip(
+                run / params.finger_length, 0.0, 1.0)
+        counts.append(int(((run > 0) & (across <= width / 2) & (out >= 0)
+                           & (out <= thick)).sum()))
+    return max(counts)
+
+
+def rolled_frame(up, lean, close, tilt, roll):
+    """(x, y, z) of the gripper: z tilted toward lean about close, then rolled about x by roll
+    (+ raises the +close fingertip, the top leans toward -close)."""
+    z1 = math.cos(tilt) * up + math.sin(tilt) * lean
+    y = math.cos(roll) * close + math.sin(roll) * z1
+    z = math.cos(roll) * z1 - math.sin(roll) * close
+    return np.cross(y, z), y, z
+
+
+def roll_tip_height(top_height, tilt, roll, opening, params):
+    """Center height between the fingertips when rolled: the lower tip above the floor as in
+    tip_height_for, the higher tip roll_top_margin under the top; None if both do not fit."""
+    rise = opening / 2 * math.sin(abs(roll)) * math.cos(tilt)
+    low = tip_height_for(0.0, tilt, params) + rise
+    high = top_height - params.roll_top_margin - rise
+    if low > high:
+        return None
+    return min(max(top_height - params.grasp_depth, low), high)
+
+
 def tip_height_for(top_height, tilt, params):
     """Fingertip center height: grasp_depth under the top, but the lowest finger corner
     (tilted end face, then the drop while closing) stays floor_clearance above the floor."""
@@ -329,14 +429,31 @@ def tip_height_for(top_height, tilt, params):
     return max(top_height - params.grasp_depth, lowest)
 
 
+def wall_points(points, heights, basket, normal, params):
+    """Scene points on the measured basket's walls: from wall_band inside a wall's inner face
+    (sloping between the floor and rim sizes) out to wall_band past the outer size."""
+    rel = points - basket.center
+    x, y = rel @ basket.axis, rel @ np.cross(normal, basket.axis)
+    rise = np.clip((heights - params.floor_height)
+                   / max(params.basket_height - params.floor_height, 1e-6), 0.0, 1.0)
+    (top_l, top_w), (floor_l, floor_w) = params.basket_inner_top, params.basket_inner_floor
+    half_l = (floor_l + (top_l - floor_l) * rise) / 2 - params.wall_band
+    half_w = (floor_w + (top_w - floor_w) * rise) / 2 - params.wall_band
+    out_l = params.basket_length / 2 + params.wall_band
+    out_w = params.basket_width / 2 + params.wall_band
+    inside_out = (np.abs(x) <= out_l) & (np.abs(y) <= out_w)
+    return inside_out & ((np.abs(x) >= half_l) | (np.abs(y) >= half_w))
+
+
 def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, params,
-               samples=None):
+               samples=None, basket=None):
     """Grasp from above: end effector y along the closing axis (horizontal), z up the fingers,
     vertical or tilted about y up to max_tilt_deg.
 
     plane: (n, d) in the camera frame, n up. depth: m, NaN invalid. rays: pixel_rays of the image.
     rotation, translation: camera frame -> base frame. ee_y: current end effector y in the base.
     samples: the per-frame targets merged into target (default: target alone).
+    basket: fit_basket result; with wall_band its walls are left to the arm side's model.
     """
     normal, plane_d = plane
     center, axis, length, width = merge_faces(samples or [target], k, d, normal, plane_d,
@@ -348,6 +465,10 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
     z = depth[valid]
     points = np.column_stack((rays[valid] * z[:, None], z))
     heights = points @ normal + plane_d
+    finger_points, finger_heights = points, heights  # what the fingers may not touch
+    if basket is not None and params.wall_band > 0 and params.basket_inner_top[0] > 0:
+        keep = ~wall_points(points, heights, basket, normal, params)
+        finger_points, finger_heights = points[keep], heights[keep]
 
     # near square (period pi/2): which side is long is not known, open for the long one
     square = target.angle_period < math.pi - 1e-6
@@ -388,8 +509,8 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
         free, first = [], None  # every tilt is checked: the motion side may need a smaller one
         for tilt in tilts:
             cand_tip = tip_height_for(target.top_height, tilt, params)
-            blocked = finger_blocks(points, heights, center, close_axis, normal, opening,
-                                    cand_tip, params, lean_cam, tilt)
+            blocked = finger_blocks(finger_points, finger_heights, center, close_axis, normal,
+                                    opening, cand_tip, params, lean_cam, tilt)
             z_cam = math.cos(tilt) * normal + math.sin(tilt) * lean_cam
             tip_point = center - normal * (target.top_height - cand_tip)
             body = body_blocks(points, tip_point, np.cross(y_cam, z_cam), y_cam, z_cam, params)
@@ -399,14 +520,26 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
                     first = (tilt, cand_tip, blocked, body)
         if first is not None:  # the candidate is shown at its largest free tilt
             tilt, cand_tip, blocked, body = first
+        where, shown = '', None
+        if first is None and blocked >= params.obstacle_points:
+            # where the blocking points are: above the object = wall or a taller neighbor
+            shown, h = blocking_points(finger_points, finger_heights, center, close_axis, normal,
+                                       opening, cand_tip, params, lean_cam, tilt)
+            where = (f' ({np.percentile(h, 10) * 1000:.0f}-{np.percentile(h, 90) * 1000:.0f}mm'
+                     f' high)')
         reason = ('too wide' if grip + 2 * params.min_clearance > params.max_open
-                  else f'blocked {blocked}' if blocked >= params.obstacle_points
+                  else f'blocked {blocked}{where}' if blocked >= params.obstacle_points
                   else f'body blocked {body}' if body >= params.obstacle_points else '')
         z_axis = math.cos(tilt) * UP + math.sin(tilt) * lean
         candidates.append(Candidate(name, close_axis, grip, opening, max(blocked, body), reason,
                                     y, turn, tilt, z_axis, lean_cam, lean, cand_tip,
-                                    tuple(free)))
+                                    tuple(free), block_points=shown))
     usable = [c for c in candidates if not c.reason]
+    if not usable and params.max_roll_deg > 0:
+        candidates = [roll_candidate(c, points, center, normal, target.top_height, params,
+                                     finger_points)
+                      for c in candidates]
+        usable = [c for c in candidates if not c.reason]
     # least wrist turn (user 2026-10-29): it also leans best, so the arm moves least
     chosen = min(usable, key=lambda c: abs(c.wrist_turn)) if usable else None
 
@@ -421,21 +554,66 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
         return grasp
     bias = np.array([params.camera_x_bias, params.camera_y_bias, params.camera_z_bias])
 
-    def option(c, tilt):
-        z_axis = math.cos(tilt) * UP + math.sin(tilt) * c.lean_base
-        tip = to_base(center - normal * (target.top_height
-                                         - tip_height_for(target.top_height, tilt, params))) - bias
+    def option(c, tilt, roll=0.0):
+        # roll is about close_axis (camera); the base y may point the other way
+        base_roll = roll if c.y_axis @ (rotation @ c.close_axis) > 0 else -roll
+        x_axis, y_axis, z_axis = rolled_frame(UP, c.lean_base, c.y_axis, tilt, base_roll)
+        height = (roll_tip_height(target.top_height, tilt, roll, c.opening, params) if roll
+                  else tip_height_for(target.top_height, tilt, params))
+        tip = to_base(center - normal * (target.top_height - height)) - bias
         # end effector up the finger axis; hover backs off along the same axis
         position = tip + z_axis * params.tip_below_end_effector - UP * params.arm_z_bias
         return GraspOption(c.name, tilt, c.opening, c.wrist_turn, tip, position,
-                           np.column_stack((np.cross(c.y_axis, z_axis), c.y_axis, z_axis)),
-                           position + z_axis * params.hover_height)
+                           np.column_stack((x_axis, y_axis, z_axis)),
+                           position + z_axis * params.hover_height, base_roll)
     options = [option(c, t) for c in sorted(usable, key=lambda c: abs(c.wrist_turn))
                for t in c.free_tilts]
+    options += [option(c, t, r) for c in sorted(usable, key=lambda c: abs(c.wrist_turn))
+                for t, r in c.free_rolls]
     best = options[0]
     return Grasp(target, normal, center, axis, length, width, chosen.tip_height, table_z,
                  candidates, chosen, '', best.tip, best.position, best.rotation, best.hover,
                  chosen.wrist_turn, options)
+
+
+def roll_candidate(c, points, center, normal, top_height, params, finger_points=None):
+    """Candidate retried rolled (both ways, roll_step_deg up to max_roll_deg) at each of its
+    tilts: a finger whose thick upper part meets a wall leans away from it."""
+    if c.reason == 'too wide':
+        return c
+    near = points[np.linalg.norm(points - center, axis=1) < 0.3]  # fingers and body only
+    if finger_points is None:
+        finger_points = points
+    near_f = finger_points[np.linalg.norm(finger_points - center, axis=1) < 0.3]
+    step, top = math.radians(params.roll_step_deg), math.radians(params.max_roll_deg)
+    rolls = [step * i for i in range(1, int(round(top / step)) + 1)]
+    lean_to = np.array([params.lean_x, params.lean_y, 0.0])
+    lean_to /= max(np.linalg.norm(lean_to), 1e-9)
+    tilt_top = math.radians(params.max_tilt_deg) * abs(c.lean_base @ lean_to)
+    tilt_step = math.radians(params.tilt_step_deg)
+    tilts = sorted({max(tilt_top - i * tilt_step, 0.0)
+                    for i in range(int(tilt_top / tilt_step) + 1)} | {0.0}, reverse=True)
+    free, least = [], None
+    for roll in rolls:
+        for tilt in tilts:
+            for signed in (roll, -roll):
+                height = roll_tip_height(top_height, tilt, signed, c.opening, params)
+                if height is None:
+                    continue
+                x, y, z = rolled_frame(normal, c.lean, c.close_axis, tilt, signed)
+                tip = center - normal * (top_height - height)
+                blocked = max(rolled_blocks(near_f, tip, x, y, z, c.opening, params),
+                              body_blocks(near, tip, x, y, z, params))
+                if least is None or blocked < least:
+                    least = blocked
+                if blocked < params.obstacle_points:
+                    free.append((tilt, signed))
+    if not free:
+        return c
+    tilt, roll = free[0]
+    return replace(c, reason='', blocked=least, tilt=tilt, roll=roll,
+                   tip_height=roll_tip_height(top_height, tilt, roll, c.opening, params),
+                   free_rolls=tuple(free))
 
 
 def fit_basket(color_bgr, depth, k, d, rays, plane, params):

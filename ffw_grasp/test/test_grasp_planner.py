@@ -4,8 +4,8 @@ import unittest
 
 import cv2
 from ffw_grasp.grasp_planner import (
-    fit_basket, GraspParams, matrix_to_quat, merge_planes, merge_targets, pick_target, plan_grasp,
-    quat_to_matrix, Target, top_face, UP, veil_pixels)
+    fit_basket, GraspParams, matrix_to_quat, merge_planes, merge_targets, pick_object,
+    pick_target, plan_grasp, quat_to_matrix, Target, top_face, UP, veil_pixels)
 from ffw_vision.blob_detector import normalize_angle
 from ffw_vision.seg_detector import pixel_rays, project
 import numpy as np
@@ -402,6 +402,38 @@ class TestMerge(unittest.TestCase):
                             target(u=10.0, score=0.8)])
         self.assertEqual(best.u, 10.0)
 
+    def test_pick_object_keeps_one_object_when_the_best_flips(self):
+        # two objects with close scores: the single-frame best changes between them
+        frames = [[target(u=100.0, score=0.80 + 0.02 * (i % 2)),
+                   target(u=200.0, score=0.81 - 0.02 * (i % 2))] for i in range(10)]
+        self.assertEqual({pick_target(f).u for f in frames}, {100.0, 200.0})
+        targets, which, seen = pick_object(frames, 10.0, 7)
+        self.assertEqual({t.u for t in targets}, {100.0})  # median 0.81 vs 0.80
+        self.assertEqual(which, list(range(10)))
+        self.assertEqual(seen, 2)
+        merged, kept = merge_targets(targets, 3.0, 7)
+        self.assertEqual(len(kept), 10)
+
+    def test_pick_object_follows_jitter_and_needs_min_frames(self):
+        frames = [[target(u=100.0 + 0.5 * i, score=0.7)] for i in range(10)]
+        for i in range(3):  # a higher score seen in 3 frames only
+            frames[i].append(target(u=300.0, score=0.95))
+        frames[4].append(target(u=150.0, height=float('nan'), score=0.99))  # unmeasured
+        targets, which, seen = pick_object(frames, 10.0, 7)
+        self.assertEqual(len(targets), 10)
+        self.assertTrue(all(t.score == 0.7 for t in targets))
+        self.assertEqual(seen, 1)
+        with self.assertRaises(ValueError):
+            pick_object([[], []], 10.0, 1)
+
+    def test_pick_object_two_close_targets_stay_apart(self):
+        # touching objects 8 px apart: one target per object and frame
+        frames = [[target(u=100.0, score=0.6), target(u=108.0, score=0.9)] for _ in range(8)]
+        targets, which, seen = pick_object(frames, 10.0, 7)
+        self.assertEqual({t.u for t in targets}, {108.0})
+        self.assertEqual(len(targets), 8)
+        self.assertEqual(seen, 2)
+
     def test_outlier_frame_dropped(self):
         frames = [target(u=100.0 + 0.1 * i) for i in range(9)] + [target(u=130.0)]
         merged, kept = merge_targets(frames, 3.0, 7)
@@ -511,6 +543,67 @@ class TestQuaternion(unittest.TestCase):
         for q in quats:
             m = quat_to_matrix(*q)
             np.testing.assert_allclose(quat_to_matrix(*matrix_to_quat(m)), m, atol=1e-9)
+
+
+FINGERS = dict(finger_tip=0.005, finger_thick=0.025, taper_height=0.030, finger_max=0.030,
+               finger_width=0.015, finger_width_root=0.025, finger_length=0.100,
+               known_short=0.0285, known_long=0.034, floor_clearance=0.008, close_drop=0.009)
+STANDING = (0.02, 0.01, 0.034, 0.0285, 0.0, 0.050)
+
+
+class TestRoll(unittest.TestCase):
+
+    def corner_scene(self, gap=0.016):
+        """Standing box with walls (75 mm) past its +a end and +b side."""
+        scene = Scene()
+        scene.raise_box(*STANDING)
+        x, y = STANDING[:2]
+        scene.raise_box(x + 0.017 + gap + 0.005, y, 0.010, 0.120, 0.0, 0.075)
+        scene.raise_box(x, y + 0.01425 + gap + 0.005, 0.120, 0.010, 0.0, 0.075)
+        return scene, scene.target(*STANDING, period=math.pi / 2, pose='standing')
+
+    def test_walls_block_every_upright_grasp(self):
+        scene, target = self.corner_scene()
+        g = scene.plan(target, params=replace(PARAMS, **FINGERS))
+        self.assertIsNone(g.chosen)
+        self.assertTrue(all(c.reason.startswith('blocked') for c in g.candidates))
+
+    def test_roll_leans_the_thick_finger_top_off_the_wall(self):
+        scene, target = self.corner_scene()
+        params = replace(PARAMS, max_roll_deg=25.0, **FINGERS)
+        g = scene.plan(target, params=params)
+        c = g.chosen
+        self.assertIsNotNone(c)
+        self.assertTrue(0 < abs(c.roll) <= math.radians(25) + 1e-9)
+        self.assertTrue(all(abs(o.roll) > 0 for o in g.options))
+        np.testing.assert_allclose(g.rotation.T @ g.rotation, np.eye(3), atol=1e-9)
+        self.assertAlmostEqual(np.linalg.det(g.rotation), 1.0)
+        # closing axis rises by the roll; both fingertips stay between the floor and the top
+        self.assertAlmostEqual(abs(g.rotation[2, 1]), math.sin(abs(g.options[0].roll))
+                               * math.cos(g.options[0].tilt), delta=1e-6)
+        rise = c.opening / 2 * math.sin(abs(c.roll)) * math.cos(c.tilt)
+        self.assertLessEqual(c.tip_height + rise, STANDING[5] - params.roll_top_margin + 1e-9)
+        self.assertGreaterEqual(c.tip_height - rise, params.floor_clearance + params.close_drop
+                                * math.cos(c.tilt) - 1e-9)
+
+    def test_free_object_is_never_rolled(self):
+        scene = Scene()
+        scene.raise_box(*STANDING)
+        g = scene.plan(scene.target(*STANDING, period=math.pi / 2, pose='standing'),
+                       params=replace(PARAMS, max_roll_deg=25.0, **FINGERS))
+        self.assertEqual(g.chosen.roll, 0.0)
+        self.assertTrue(all(o.roll == 0.0 for o in g.options))
+
+    def test_too_short_object_cannot_roll(self):
+        # 20 mm high: the raised fingertip would leave the side face at any roll step
+        scene = Scene()
+        low = STANDING[:5] + (0.020,)
+        scene.raise_box(*low)
+        x, y = low[:2]
+        scene.raise_box(x + 0.017 + 0.021, y, 0.010, 0.120, 0.0, 0.075)
+        scene.raise_box(x, y + 0.01425 + 0.021, 0.120, 0.010, 0.0, 0.075)
+        g = scene.plan(scene.target(*low), params=replace(PARAMS, max_roll_deg=25.0, **FINGERS))
+        self.assertIsNone(g.chosen)
 
 
 if __name__ == '__main__':

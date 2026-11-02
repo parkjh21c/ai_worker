@@ -28,6 +28,13 @@
    몸통 검사(`finger_length` > 0): 그리퍼 몸통(`body_*`, 손끝에서 축 따라 `finger_length` 부터)과 다음 링크(`link_*`, 카메라 포함, `link_start` 부터)를 손가락 축 위쪽으로 끝까지 뻗은 상자로 보고, 그 안의 장면 점도 막힘으로 센다. 기울기별로 다시 검사
    손끝 높이: 윗면 아래 `grasp_depth`, 단 가장 낮은 손가락 모서리(기울어진 끝면 `finger_width`/2·sin, 닫힐 때 `close_drop`)가 바닥(`floor_height`, 예: 바구니 바닥) 위 `floor_clearance` 이상
    `long_side_poses` 의 자세는 측정 비율이 `square_ratio` 미만이면 어느 변이 긴지 모르므로 두 후보 모두 `known_long` 으로 벌림 (줄여 잰 윗면이 정사각형처럼 보임)
+7-0. **손가락과 바구니 벽 접촉 허용**(`wall_band` > 0, 사용자 2026-11-02): 측정한 바구니 모델의 벽 안쪽 면에서 `wall_band` 안쪽부터 바깥 크기 + `wall_band` 까지의 점은 손가락 검사에서 뺀다
+   (벽 가운데가 안쪽으로 볼록, 파란 벽 depth 가 프레임마다 흔들림, 바구니는 조금 밀려도 됨). 몸통·손목 검사는 벽을 그대로 본다. 이웃 물체·바구니 밖 물체는 계속 막음.
+   그래서 바구니 측정을 집기 계산보다 먼저 한다. `pick_moveit.py` 도 MoveIt 에서 손가락(연장부·URDF 손가락)과 벽의 접촉을 허용한다(`--check-finger-walls` 로 끔)
+7-1. **롤**(`max_roll_deg` > 0, 모든 수직 계열 자세가 막혔을 때만): 그리퍼를 가로축 중심으로 `roll_step_deg` 씩 최대 `max_roll_deg` 까지 양쪽으로 기울여 다시 검사한다 —
+   손가락 위쪽 두꺼운 부분(25~30 mm)이 바구니 벽에 닿는 경우, 그 손가락 윗부분을 벽에서 떼어 냄. 대신 두 손끝 높이가 달라져서, 낮은 손끝은 바닥 여유(`tip_height_for`, 닫힐 때 내려감 포함) 위,
+   높은 손끝은 윗면 `roll_top_margin` 아래여야 함(물체가 낮으면 못 기울임). 손가락·몸통 검사는 기울어진 자세 그대로(강체) 한다. 막히지 않은 수직 자세가 하나라도 있으면 롤은 쓰지 않는다
+   (2026-10-30 녹화 89 장: 성공 85 그대로, 막힘 4 중 1 장(세움, 벽 옆) 이 롤 25° 로 풀림. 넓은 면이 위인 눕힘(28.5 mm)은 손끝이 들어갈 높이가 모자람)
 8. 막히지 않은 후보 중 **손목을 덜 돌리는 쪽**(사용자 2026-10-29: 항상). 덜 돌리는 쪽이 로봇 쪽으로 기울이기도 좋아 팔 동작이 작다. 둘 다 막히면 실패
 9. 자세: 손끝 목표 = 윗면 중심 아래 `grasp_depth`(탁자 위 최소 `min_tip_height`), z 축 = base 위쪽, y 축 = 닫히는 방향(수평).
    그리퍼가 대칭이므로 y 는 지금 `end_effector_frame` 의 y 와 가까운 쪽. `end_effector_frame` 목표 = 손끝 목표 + 위로 `tip_below_end_effector`.
@@ -45,11 +52,12 @@
 | `grasp_pose` | `geometry_msgs/PoseStamped`, `base_frame` 기준 `end_effector_frame` 목표(손끝이 아님, 응답의 `tip z` 가 손끝). stamp = 마지막 관측 촬영 시각 |
 | `hover_pose` | 같은 방향, `hover_height` 위 |
 | `gripper_opening` | `std_msgs/Float64`, 벌림(m). 그리퍼 관절 값으로 바꾸는 것은 아직 없음 |
-| `debug_image` | 마지막 프레임 위에 초록 = 윗면, 하늘색 = 고른 손가락 자리, 빨강 = 막힌 자리, 회색 = 안 고른 자리, 주황 = 바구니 테두리(알려진 크기) |
+| `debug_image` | 마지막 프레임 위에 초록 = 잰 윗면, 하늘색 = 고른 손가락 자리, 빨강 네모 = 막힌 손가락 자리(손끝 높이에서 본 모양만), 빨강 점 = 그 손가락을 막는 장면 점(손가락 위쪽 두꺼운 부분까지 검사), 회색 = 안 고른 자리, 주황 = 바구니 테두리(알려진 크기). 막힘 이유는 `blocked 85 (39-61mm high)` 처럼 막는 점의 높이(탁자 위, 10~90 %)를 함께 — 물체 윗면보다 높으면 벽이나 더 높은 이웃 |
 | `basket_pose` | `PoseStamped`, 바구니 바깥 바닥 중심(탁자 평면 위), x = 긴 변, z = 탁자 법선. 카메라 보정값을 뺀 값. stamp 는 `grasp_pose` 와 같음 |
 | `table_pose` | `PoseStamped`, 물체 아래 탁자 평면의 점, z = 법선. 카메라 보정값을 뺀 값 |
+| `object_pose` | `PoseStamped`, 물체 윗면 중심, x = 긴 변, z = 탁자 법선. 카메라 보정값을 뺀 값. **집을 수 없어도(모두 막힘) 발행** — 높이 = `table_pose` 와의 z 차이 (`pick_moveit.py --shake` 가 장면의 물체 상자로 씀) |
 | `grasp_candidates` | `geometry_msgs/PoseArray`, 막히지 않은 후보 × 기울기 전부의 `end_effector_frame` 목표. 첫째 = `grasp_pose`, 그다음 같은 후보의 작은 기울기, 다른 후보 순 — 팔 쪽이 IK·충돌로 고름 |
-| `grasp_candidate_info` | `std_msgs/Float64MultiArray`, `grasp_candidates` 순서대로 4 개씩: 벌림(m), 기울기(rad), 0 = A 1 = B, 손목 회전(rad) |
+| `grasp_candidate_info` | `std_msgs/Float64MultiArray`, `grasp_candidates` 순서대로 5 개씩: 벌림(m), 기울기(rad), 0 = A 1 = B, 손목 회전(rad), 롤(rad, + = end effector +y 쪽 손끝이 높음) |
 
 - 출력 토픽은 모두 transient local(마지막 값 유지). `ros2 topic echo` 로 보려면 `--qos-durability transient_local`.
 - `end_effector_r_link`(arm_r_link7 z −0.215) 와 손끝: URDF(표준 RH-P12-RN) 메시로는 벌림 58~70 mm 에서 2 mm 이내, 쥐며 닫히면(34 mm) 약 6 mm 더 내려감(손가락 링크 구조). **실제 손가락은 4.5 cm 더 길어서**(사용자 2026-10-30 정정, 처음엔 5 cm) task 설정 `tip_below_end_effector: 0.045`. `arm_z_bias` 는 같은 hover 자 측정을 4.5 cm 로 다시 계산한 값(+5 mm).

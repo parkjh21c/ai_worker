@@ -3,8 +3,8 @@ import threading
 import warnings
 
 from ffw_grasp.grasp_planner import (
-    fit_basket, GraspParams, matrix_to_quat, merge_planes, merge_targets, pick_target,
-    plan_grasp, quat_to_matrix, Target)
+    fit_basket, GraspParams, matrix_to_quat, merge_planes, merge_targets, pick_object,
+    pick_target, plan_grasp, quat_to_matrix, Target)
 from ffw_grasp.overlay import draw_basket, draw_grasp
 from ffw_vision.camera_config import declare_camera_parameters, load_camera_config
 from ffw_vision.depth_stats import color_from_msg, depth_from_msg
@@ -93,7 +93,8 @@ def grasp_summary(g):
     x, y, z = g.position
     return (f'{top} {g.chosen.name} open {g.chosen.opening * 1000:.0f}mm'
             f' tilt {math.degrees(g.chosen.tilt):.0f}deg'
-            f' grasp ({x:.3f}, {y:.3f}, {z:.3f}) tip z {g.tip[2]:.3f} hover z {g.hover[2]:.3f}'
+            + (f' roll {math.degrees(g.chosen.roll):+.0f}deg' if g.chosen.roll else '')
+            + f' grasp ({x:.3f}, {y:.3f}, {z:.3f}) tip z {g.tip[2]:.3f} hover z {g.hover[2]:.3f}'
             f' wrist turn {math.degrees(g.wrist_turn):+.0f}deg table z {g.table_z:.3f}')
 
 
@@ -107,7 +108,9 @@ def overlay_text(g):
     if g.chosen is None:
         return g.reason
     return (f'{g.target.pose_label} {g.chosen.name} open {g.chosen.opening * 1000:.0f}mm'
-            f' tilt {math.degrees(g.chosen.tilt):.0f} turn {math.degrees(g.wrist_turn):+.0f}deg')
+            f' tilt {math.degrees(g.chosen.tilt):.0f}'
+            + (f' roll {math.degrees(g.chosen.roll):+.0f}' if g.chosen.roll else '')
+            + f' turn {math.degrees(g.wrist_turn):+.0f}deg')
 
 
 class GraspPlannerNode(Node):
@@ -124,6 +127,7 @@ class GraspPlannerNode(Node):
         self.declare_parameter('min_frames', 7)
         self.declare_parameter('timeout_sec', 5.0)
         self.declare_parameter('max_center_jitter_px', 3.0)
+        self.declare_parameter('object_radius_px', 10.0)  # same object in the next frame
         self.declare_parameter('max_camera_motion', 0.002)  # m between first and last frame
         self.declare_parameter('max_camera_turn_deg', 0.5)
         self.config = load_camera_config(self)
@@ -133,8 +137,8 @@ class GraspPlannerNode(Node):
         if not self.config.depth_topic or not self.config.camera_info_topic:
             raise ValueError('grasp_planner needs depth_topic and camera_info_topic')
         names = ('base_frame', 'end_effector_frame', 'depth_scale', 'frames', 'min_frames',
-                 'timeout_sec', 'max_center_jitter_px', 'max_camera_motion',
-                 'max_camera_turn_deg')
+                 'timeout_sec', 'max_center_jitter_px', 'object_radius_px',
+                 'max_camera_motion', 'max_camera_turn_deg')
         for name in names:
             setattr(self, name, self.get_parameter(name).value)
 
@@ -155,6 +159,7 @@ class GraspPlannerNode(Node):
         self.debug_pub = self.create_publisher(Image, 'debug_image', LATCHED)
         self.basket_pub = self.create_publisher(PoseStamped, 'basket_pose', LATCHED)
         self.table_pub = self.create_publisher(PoseStamped, 'table_pose', LATCHED)
+        self.object_pub = self.create_publisher(PoseStamped, 'object_pose', LATCHED)
         # every usable candidate x free tilt, chosen first; info rows: opening, tilt, 0=A 1=B, turn
         self.options_pub = self.create_publisher(PoseArray, 'grasp_candidates', LATCHED)
         self.info_pub = self.create_publisher(Float64MultiArray, 'grasp_candidate_info', LATCHED)
@@ -236,16 +241,18 @@ class GraspPlannerNode(Node):
         info = self.camera_info
         if info is None:
             raise ValueError('no camera_info yet')
-        targets, planes, used = [], [], []
+        found, used = [], []
         for frame in frames:
             obs = frame[0]
             valid = [target_from_msg(o) for o in obs.objects
                      if o.status == ObjectObservation.STATUS_VALID]
-            target = pick_target(valid)
-            if target is not None and obs.has_support_plane:
-                targets.append(target)
-                planes.append(obs.support_plane)
+            if pick_target(valid) is not None and obs.has_support_plane:
+                found.append(valid)
                 used.append(frame)
+        # one object over the frames: the highest median score (one per plan)
+        targets, which, seen = pick_object(found, self.object_radius_px, self.min_frames)
+        used = [used[i] for i in which]
+        planes = [frame[0].support_plane for frame in used]
         target, kept = merge_targets(targets, self.max_center_jitter_px, self.min_frames)
         plane = merge_planes([planes[i] for i in kept])
         kept_frames = [used[i] for i in kept]
@@ -268,16 +275,18 @@ class GraspPlannerNode(Node):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', RuntimeWarning)  # all-NaN pixels stay NaN
             depth = np.nanmedian(depths, axis=0)
-        grasp = plan_grasp(target, plane, depth, info.k, info.d, self.rays_for(info),
-                           rotation, translation, ee_rotation[:, 1], self.params,
-                           [targets[i] for i in kept])
         color = kept_frames[-1][2]
         image = color_from_msg(color) if color is not None else None
+        # the basket first: its walls are checked by the arm side's model (wall_band)
         basket, basket_reason = (fit_basket(image, depth, info.k, info.d, self.rays_for(info),
                                             plane, self.params)
                                  if image is not None else (None, 'no color image'))
+        grasp = plan_grasp(target, plane, depth, info.k, info.d, self.rays_for(info),
+                           rotation, translation, ee_rotation[:, 1], self.params,
+                           [targets[i] for i in kept], basket)
         self.publish_scene(grasp, basket, plane, rotation, translation, last.stamp)
-        summary = (f'{grasp_summary(grasp)} frames {len(kept)}/{len(frames)};'
+        summary = (f'{grasp_summary(grasp)} frames {len(kept)}/{len(frames)}'
+                   + (f' (highest score of {seen} objects)' if seen > 1 else '') + ';'
                    f' {basket_summary(basket, basket_reason, self.params)}'
                    f' ({bias_summary(self.params)})')
         if image is not None:
@@ -300,19 +309,23 @@ class GraspPlannerNode(Node):
             options.poses.append(pose_msg(self.base_frame, last.stamp, o.position,
                                           o.rotation).pose)
             info += [float(o.opening), float(o.tilt), 0.0 if o.name == 'A' else 1.0,
-                     float(o.wrist_turn)]
+                     float(o.wrist_turn), float(o.roll)]
         self.info_pub.publish(Float64MultiArray(data=info))
         self.options_pub.publish(options)
         return f'{summary}; {len(grasp.options)} options'
 
     def publish_scene(self, grasp, basket, plane, rotation, translation, stamp):
-        """Table under the object and the basket bottom, true base frame (camera bias removed)."""
+        """Table under the object, object top and basket bottom, true base frame (camera bias
+        removed); published even when no grasp is usable."""
         p = self.params
         bias = np.array([p.camera_x_bias, p.camera_y_bias, p.camera_z_bias])
         up = rotation @ plane[0]
         table = rotation @ (grasp.center - plane[0] * grasp.target.top_height) + translation
         self.table_pub.publish(pose_msg(self.base_frame, stamp, table - bias,
                                         plane_rotation(up, np.array([1.0, 0.0, 0.0]))))
+        self.object_pub.publish(pose_msg(self.base_frame, stamp,
+                                         rotation @ grasp.center + translation - bias,
+                                         plane_rotation(up, rotation @ grasp.axis)))
         if basket is not None:
             self.basket_pub.publish(pose_msg(
                 self.base_frame, stamp, rotation @ basket.center + translation - bias,

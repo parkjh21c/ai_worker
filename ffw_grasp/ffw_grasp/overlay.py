@@ -20,7 +20,7 @@ def draw_box(image, center, axis, normal, half_along, half_across, color, thickn
 
 def draw_grasp(image, grasp, k, d, params, text):
     """Green = top face; finger spaces at tip height (and 5 cm up when tilted):
-    cyan = chosen, red = blocked, gray = free."""
+    cyan = chosen, red = blocked (red dots = the scene points blocking it), gray = free."""
     out = image.copy()
     n = grasp.normal
     draw_box(out, grasp.center, grasp.axis, n, grasp.length_m / 2, grasp.width_m / 2, TOP, 1,
@@ -28,10 +28,16 @@ def draw_grasp(image, grasp, k, d, params, text):
     for c in grasp.candidates:
         tip = grasp.center - n * (grasp.target.top_height - c.tip_height)
         color = CHOSEN if c is grasp.chosen else BLOCKED if c.reason else FREE
+        if c.reason and c.block_points is not None and len(c.block_points):
+            for u, v in np.round(project(c.block_points[::max(1, len(c.block_points) // 300)],
+                                         k, d)).astype(int):
+                cv2.circle(out, (int(u), int(v)), 1, BLOCKED, -1)
         # the finger at tip height and UPPER above it (shifted when tilted)
         upper = n * UPPER + c.lean * UPPER * np.tan(c.tilt)
+        rise = c.opening / 2 * np.sin(c.roll) * np.cos(c.tilt)  # rolled: +close_axis tip higher
         for side in (1, -1):
-            finger = tip + side * (c.opening / 2 + params.finger_max / 2) * c.close_axis
+            finger = (tip + side * (c.opening / 2 + params.finger_max / 2) * c.close_axis
+                      + side * rise * n)
             draw_box(out, finger, c.close_axis, n, params.finger_max / 2,
                      params.finger_width / 2, color, 2 if c is grasp.chosen else 1, k, d)
             if c.tilt:
