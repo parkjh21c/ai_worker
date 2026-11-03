@@ -4,8 +4,9 @@ import unittest
 
 import cv2
 from ffw_grasp.grasp_planner import (
-    fit_basket, GraspParams, matrix_to_quat, merge_planes, merge_targets, pick_object,
-    pick_target, plan_grasp, quat_to_matrix, Target, top_face, UP, veil_pixels)
+    away_roll_sign, backup_rolls, Basket, fit_basket, GraspParams, matrix_to_quat, merge_planes,
+    merge_targets, pick_object, pick_target, plan_grasp, quat_to_matrix, Target, top_face, UP,
+    veil_pixels)
 from ffw_vision.blob_detector import normalize_angle
 from ffw_vision.seg_detector import pixel_rays, project
 import numpy as np
@@ -604,6 +605,35 @@ class TestRoll(unittest.TestCase):
         scene.raise_box(x, y + 0.01425 + 0.021, 0.120, 0.010, 0.0, 0.075)
         g = scene.plan(scene.target(*low), params=replace(PARAMS, max_roll_deg=25.0, **FINGERS))
         self.assertIsNone(g.chosen)
+
+    def test_roll_backups_follow_the_upright_options(self):
+        scene = Scene()
+        scene.raise_box(*STANDING)
+        target = scene.target(*STANDING, period=math.pi / 2, pose='standing')
+        params = replace(PARAMS, max_roll_deg=25.0, **FINGERS)
+        plain = scene.plan(target, params=params)
+        g = scene.plan(target, params=replace(params, roll_backup=True, roll_backup_max=4))
+        n = len(plain.options)
+        self.assertEqual([(o.name, o.tilt, o.roll) for o in g.options[:n]],
+                         [(o.name, o.tilt, o.roll) for o in plain.options])
+        np.testing.assert_allclose(g.position, plain.position)
+        rolled = g.options[n:]
+        self.assertTrue(rolled and all(o.roll for o in rolled))
+        self.assertLessEqual(len(rolled), 4 * len(g.candidates))
+
+    def test_backup_order_leans_away_from_the_nearer_wall_first(self):
+        free = {(0.3, 0.1), (0.3, -0.1), (0.2, 0.1), (0.1, 0.2), (0.1, -0.2)}
+        rolls, tilts = (0.1, 0.2, 0.3), (0.3, 0.2, 0.1)
+        self.assertEqual(backup_rolls(rolls, tilts, -1, 4, lambda t, r: (t, r) in free),
+                         [(0.3, -0.1), (0.1, -0.2), (0.3, 0.1), (0.1, 0.2)])
+        self.assertEqual(backup_rolls(rolls, tilts, 1, 2, lambda t, r: (t, r) in free),
+                         [(0.1, 0.2), (0.1, -0.2)])
+        # object 0.1 m along +x from the center of a 0.32 x 0.24 basket: + roll leans to -x
+        n, x = np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0])
+        basket = Basket(np.zeros(3), x, 0.32, 0.24, '')
+        self.assertEqual(away_roll_sign(0.1 * x, x, n, basket, BASKET), 1)
+        self.assertEqual(away_roll_sign(-0.1 * x, x, n, basket, BASKET), -1)
+        self.assertEqual(away_roll_sign(0.1 * x, x, n, None, BASKET), 0)
 
 
 if __name__ == '__main__':

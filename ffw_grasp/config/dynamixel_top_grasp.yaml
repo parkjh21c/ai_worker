@@ -34,6 +34,8 @@
     max_roll_deg: 25.0  # only when every upright grasp is blocked (thick finger top vs a wall)
     roll_step_deg: 5.0
     roll_top_margin: 0.004  # m: the raised fingertip stays this far under the top face
+    roll_backup: true  # free rolls also listed after the upright options: MoveIt's walls may
+    roll_backup_max: 8  # block every upright one (2026-11-03); per candidate, half per side
     near_radius: 0.3  # m: rolled grasps check the scene points this close to the object
     max_tilt_deg: 40.0  # tilt about the closing axis, top toward the robot: the arm stays in the
     # initial pose's elbow shape (vertical needs a 2-3 rad elbow flip); user OK 2026-10-29.

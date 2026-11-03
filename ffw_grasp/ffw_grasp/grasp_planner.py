@@ -48,6 +48,8 @@ class GraspParams:
     max_roll_deg: float = 0.0  # tilt about the across axis, only when every upright grasp is
     roll_step_deg: float = 5.0  # blocked: the top leans away from one finger; 0 = off
     roll_top_margin: float = 0.004  # m: the raised fingertip stays this far under the top face
+    roll_backup: bool = False  # also list free rolls after the upright options (arm side walls)
+    roll_backup_max: int = 8  # rolled backups per candidate, half per lean side
     tip_below_end_effector: float = 0.0  # fingertip below the end effector origin at grasp opening
     camera_z_bias: float = 0.0  # camera-measured base z minus true z (kept apart from arm_z_bias)
     camera_x_bias: float = 0.0  # camera-measured base x minus true x (each kept apart)
@@ -546,6 +548,20 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
                                      finger_points)
                       for c in candidates]
         usable = [c for c in candidates if not c.reason]
+    backups = []  # (candidate, tilt, roll) tried after every upright option
+    if usable and not usable[0].roll and params.roll_backup and params.max_roll_deg > 0:
+        for c in sorted(candidates, key=lambda c: abs(c.wrist_turn)):
+            if c.reason == 'too wide':
+                continue
+            rolls, tilts, blocked = roll_grid(c, points, center, normal, target.top_height,
+                                              params, finger_points)
+            away = away_roll_sign(center, c.close_axis, normal, basket, params)
+
+            def free(t, r, blocked=blocked):
+                count = blocked(t, r)
+                return count is not None and count < params.obstacle_points
+            backups += [(c, t, r) for t, r in backup_rolls(rolls, tilts, away,
+                                                            params.roll_backup_max, free)]
     # least wrist turn (user 2026-10-29): it also leans best, so the arm moves least
     chosen = min(usable, key=lambda c: abs(c.wrist_turn)) if usable else None
 
@@ -576,17 +592,17 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
                for t in c.free_tilts]
     options += [option(c, t, r) for c in sorted(usable, key=lambda c: abs(c.wrist_turn))
                 for t, r in c.free_rolls]
+    options += [option(c, t, r) for c, t, r in backups]
     best = options[0]
     return Grasp(target, normal, center, axis, length, width, chosen.tip_height, table_z,
                  candidates, chosen, '', best.tip, best.position, best.rotation, best.hover,
                  chosen.wrist_turn, options)
 
 
-def roll_candidate(c, points, center, normal, top_height, params, finger_points=None):
-    """Candidate retried rolled (both ways, roll_step_deg up to max_roll_deg) at each of its
-    tilts: a finger whose thick upper part meets a wall leans away from it."""
-    if c.reason == 'too wide':
-        return c
+def roll_grid(c, points, center, normal, top_height, params, finger_points=None):
+    """(rolls, tilts, blocked) for rolling c: rolls by roll_step_deg up to max_roll_deg, its
+    tilts largest first, blocked(tilt, signed roll) = most scene points in a finger or the
+    body, None when the fingertips do not fit the side face."""
     near = points[np.linalg.norm(points - center, axis=1) < params.near_radius]  # fingers, body
     if finger_points is None:
         finger_points = points
@@ -599,20 +615,35 @@ def roll_candidate(c, points, center, normal, top_height, params, finger_points=
     tilt_step = math.radians(params.tilt_step_deg)
     tilts = sorted({max(tilt_top - i * tilt_step, 0.0)
                     for i in range(int(tilt_top / tilt_step) + 1)} | {0.0}, reverse=True)
+
+    def blocked(tilt, signed):
+        height = roll_tip_height(top_height, tilt, signed, c.opening, params)
+        if height is None:
+            return None
+        x, y, z = rolled_frame(normal, c.lean, c.close_axis, tilt, signed)
+        tip = center - normal * (top_height - height)
+        return max(rolled_blocks(near_f, tip, x, y, z, c.opening, params),
+                   body_blocks(near, tip, x, y, z, params))
+    return rolls, tilts, blocked
+
+
+def roll_candidate(c, points, center, normal, top_height, params, finger_points=None):
+    """Candidate retried rolled (both ways, roll_step_deg up to max_roll_deg) at each of its
+    tilts: a finger whose thick upper part meets a wall leans away from it."""
+    if c.reason == 'too wide':
+        return c
+    rolls, tilts, blocked = roll_grid(c, points, center, normal, top_height, params,
+                                      finger_points)
     free, least = [], None
     for roll in rolls:
         for tilt in tilts:
             for signed in (roll, -roll):
-                height = roll_tip_height(top_height, tilt, signed, c.opening, params)
-                if height is None:
+                count = blocked(tilt, signed)
+                if count is None:
                     continue
-                x, y, z = rolled_frame(normal, c.lean, c.close_axis, tilt, signed)
-                tip = center - normal * (top_height - height)
-                blocked = max(rolled_blocks(near_f, tip, x, y, z, c.opening, params),
-                              body_blocks(near, tip, x, y, z, params))
-                if least is None or blocked < least:
-                    least = blocked
-                if blocked < params.obstacle_points:
+                if least is None or count < least:
+                    least = count
+                if count < params.obstacle_points:
                     free.append((tilt, signed))
     if not free:
         return c
@@ -620,6 +651,40 @@ def roll_candidate(c, points, center, normal, top_height, params, finger_points=
     return replace(c, reason='', blocked=least, tilt=tilt, roll=roll,
                    tip_height=roll_tip_height(top_height, tilt, roll, c.opening, params),
                    free_rolls=tuple(free))
+
+
+def away_roll_sign(center, close_axis, normal, basket, params):
+    """Roll sign whose top leans away from the nearer basket wall along close_axis
+    (+ leans toward -close); 0 without a basket."""
+    if basket is None or not params.basket_length:
+        return 0
+    across = np.cross(normal, basket.axis)
+    rel = center - basket.center
+    p = np.array([rel @ basket.axis, rel @ across])
+    u = np.array([close_axis @ basket.axis, close_axis @ across])
+    half = np.array([params.basket_length, params.basket_width]) / 2
+
+    def reach(s):  # distance from the object to the wall along s * close_axis
+        return min((half[i] - s * u[i] * p[i] / abs(u[i])) / abs(u[i])
+                   for i in range(2) if abs(u[i]) > 1e-9)
+    return 1 if reach(1) < reach(-1) else -1
+
+
+def backup_rolls(rolls, tilts, away, count, free):
+    """Rolled backups (tilt, signed roll): per side the count // 2 largest rolls that are
+    free (free(tilt, roll)) at some tilt, each at its largest free tilt; small rolls first,
+    the away side (sign) first. Stops checking once a side has enough."""
+    out = []
+    for side in ((away, -away) if away else (1, -1)):
+        found = []
+        for roll in sorted(rolls, reverse=True):
+            if len(found) >= count // 2:
+                break
+            tilt = next((t for t in tilts if free(t, side * roll)), None)
+            if tilt is not None:
+                found.append((tilt, side * roll))
+        out += found[::-1]
+    return out
 
 
 def fit_basket(color_bgr, depth, k, d, rays, plane, params):

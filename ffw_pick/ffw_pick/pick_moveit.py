@@ -7,8 +7,9 @@ passes (stop only when none does; a big motion is refused only when it collides)
   from initial pose 3 (all within --turn-window of the least: least joint motion of those that
   pass; beyond it the first that passes); for each, the path with the least joint motion over every
   analytic IK solution (analytic_ik): joint path to the line start, straight to the grasp and
-  straight up (lift); colliding solutions are left out until one passes, OMPL to the line start
-  last. Every path is collision checked by move_group and shown in RViz (Planned Path).
+  straight up (lift); colliding solutions are left out until one passes. Rolled options
+  (ffw_grasp roll_backup) only when no upright one passes, in ffw_grasp's order; OMPL to the
+  line start last. Every path is collision checked by move_group and shown in RViz (Planned Path).
   Without --run the arm is not moved.
 
 --run: open -> approach -> close -> lift (replanned from where the arm stopped) -> hold.
@@ -138,6 +139,17 @@ def summary_lines(name, samples, chain, joints, tip_below, floor_z):
 def turn_between(a, b):
     """Rotation angle from rotation a to rotation b, rad."""
     return math.acos(max(-1.0, min(1.0, (np.trace(a.T @ b) - 1.0) / 2.0)))
+
+
+def search_tiers(options, home_rot):
+    """Upright then rolled (turn, option index, flip) entries: upright by TCP turn from
+    home_rot, rolled in the given order (ffw_grasp: leaning away from the nearer wall first)."""
+    entries = [(turn_between(home_rot, o['rotation'] @ f), oi, flip)
+               for oi, o in enumerate(options)
+               for flip, f in ((False, np.eye(3)), (True, FLIP))]
+    upright = sorted((e for e in entries if not options[e[1]].get('roll')),
+                     key=lambda e: (round(e[0], 3), e[1], e[2]))
+    return upright, [e for e in entries if options[e[1]].get('roll')]
 
 
 def limit_margin(chain, joints, values):
@@ -725,7 +737,7 @@ def main():
                 out.append({'position': position, 'rotation': rotation, 'opening': opening,
                             'label': f'{"AB"[int(name)]} tilt {math.degrees(tilt):.0f}'
                             + (f' roll {math.degrees(roll):+.0f}' if roll else ''),
-                            'turn': turn})
+                            'turn': turn, 'roll': roll})
         if not out:
             position, rotation = pose_parts(poses['grasp'])
             tilt = math.degrees(math.acos(np.clip(rotation[2, 2], -1, 1)))
@@ -849,30 +861,34 @@ def main():
         gripper yaws in order of TCP turn from the initial pose; every one within --turn-window
         of the least turn is solved and the least joint motion of those that pass wins (user
         2026-11-02); past the window the first that passes. Within one, the least joint motion
-        (try_approach); OMPL only after every one failed so."""
+        (try_approach). Rolled options only when no upright one passes: first that passes, in
+        ffw_grasp's order (2026-11-03). OMPL only after every one failed so."""
         deadline = time.time() + args.budget
-        entries = sorted(((turn_between(home_rot, o['rotation'] @ f), oi, flip)
-                          for oi, o in enumerate(options)
-                          for flip, f in ((False, np.eye(3)), (True, FLIP))),
-                         key=lambda e: (round(e[0], 3), e[1], e[2]))
-        window = entries[0][0] + math.radians(args.turn_window) if entries else 0.0
+        upright, rolled = search_tiers(options, home_rot)
         retry, best = [], None
-        for turn, oi, flip in entries:
-            if best is not None and turn > window:
+        for tier, entries in (('upright', upright), ('rolled', rolled)):
+            if best is not None or time.time() > deadline:
                 break
-            if time.time() > deadline:
-                log.append(f'search budget {args.budget:.0f} s used up')
-                break
-            o = options[oi]
-            rotation = o['rotation'] @ FLIP if flip else o['rotation']
-            name = f'{o["label"]}{" flip" if flip else ""} (TCP turn {math.degrees(turn):.0f} deg)'
-            found, why, ompl = try_approach(o, rotation, now, lift, deadline,
-                                            best[2][4] if best else math.inf)
-            log.append(f'{name}: ' + (f'OK - {found[1]}' if found else why))
-            if found and (best is None or found[4] < best[2][4]):
-                best = (o, rotation, found)
-            if ompl is not None:
-                retry.append((name, o, rotation, ompl))
+            if tier == 'rolled' and entries:
+                log.append(f'rolled backups: {len(entries) // 2} options')
+            window = entries[0][0] + math.radians(args.turn_window) if entries else 0.0
+            for turn, oi, flip in entries:
+                if best is not None and (tier == 'rolled' or turn > window):
+                    break
+                if time.time() > deadline:
+                    log.append(f'search budget {args.budget:.0f} s used up')
+                    break
+                o = options[oi]
+                rotation = o['rotation'] @ FLIP if flip else o['rotation']
+                name = (f'{o["label"]}{" flip" if flip else ""}'
+                        f' (TCP turn {math.degrees(turn):.0f} deg)')
+                found, why, ompl = try_approach(o, rotation, now, lift, deadline,
+                                                best[2][4] if best else math.inf)
+                log.append(f'{name}: ' + (f'OK - {found[1]}' if found else why))
+                if found and (best is None or found[4] < best[2][4]):
+                    best = (o, rotation, found)
+                if ompl is not None:
+                    retry.append((name, o, rotation, ompl))
         if best is not None:
             return (best[0], best[1]) + best[2][:4]
         if time.time() > deadline:
@@ -910,8 +926,10 @@ def main():
                 poses.clear()
                 for key in ('opening', 'candidates', 'info'):
                     got.pop(key, None)
+                asked = time.time()
                 result = call(plan_client, Trigger.Request(), 20.0)
-                print(f'plan: {result.message if result else "no answer"}')
+                print(f'plan: {result.message if result else "no answer"}'
+                      f' ({time.time() - asked:.1f} s)')
                 if result is not None and result.success:
                     break
                 if attempt == tries:

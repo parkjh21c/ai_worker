@@ -43,7 +43,7 @@ class TestInstalledSettings(unittest.TestCase):
     def test_pick(self):
         pick = from_file(PickConfig, os.path.join(CONFIG, 'pick.yaml'))
         self.assertEqual(pick, PickConfig(
-            ns='/ffw_grasp/right_wrist', above=0.10, lift=0.15, speed=0.1, accel=0.1,
+            ns='/ffw_grasp/right_wrist', above=0.10, lift=0.15, speed=0.35, accel=0.35,
             turn_window=15.0, budget=30.0, hold=2.0, home_lift=0.10, plan_tries=3,
             retry_wait=2.0, empty_tries=2, state_tolerance=0.01))
         self.assertIsInstance(pick.plan_tries, int)
