@@ -265,7 +265,10 @@ ros2 topic echo /ffw_vision/right_wrist/object_observations --once
 - 화면: 회색 = 모델 마스크, 초록/주황 = 윗면, 글자 = 자세 + 높이(mm) + 점수.
 - task 설정: `config/dynamixel_basket_seg.yaml` (초기 자세 3차, `auto_detect.launch.py` 의 기본 `task_file`).
   바구니 색(HSV)은 `config/blue_basket.yaml`(`basket_file`) — `ffw_grasp` 의 바구니 맞추기와 같은 파일.
-- 가중치: launch 인자 `model_path`. 기본은 환경 변수 `FFW_VISION_MODEL`, 없으면 `/workspace/vision_ws/runs/dyn_seg_n/weights/best.pt`(repo 밖, 2026-10-29 학습).
+- 가중치: launch 인자 `model_path`. 기본은 환경 변수 `FFW_VISION_MODEL`, 없으면 이 패키지의 `models/dynamixel_seg_n.pt`(설치 후 share/ffw_vision/models, 2026-10-29 학습).
+- 학습 도구(`tools/`, 설치 안 함, `ultralytics` 필요):
+  `labelme_draft.py`(규칙 기반 초안) → labelme 로 다듬기 → `labelme_to_yolo.py`(YOLO-seg 데이터셋) → `train_seg.py`(yolo11n-seg, 448, 150 epoch) → `eval_seg.py`(라벨과 비교).
+  `extract_frames.py`: 녹화(bag)에서 컬러·16비트 depth·CameraInfo·TF·관절 값을 프레임별로 저장(라벨 초안과 오프라인 분석의 입력). 데이터셋(이미지 약 50 장)은 repo 밖 `/workspace/vision_ws/datasets/dynamixel_seg`.
 
 ```bash
 ros2 launch ffw_vision auto_detect.launch.py                       # camera_id:=right_wrist, port:=8765 기본

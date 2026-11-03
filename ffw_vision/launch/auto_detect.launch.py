@@ -7,8 +7,9 @@ from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-# YOLO weights trained outside the repo (2026-10-29); FFW_VISION_MODEL or model_path:= overrides
-DEFAULT_MODEL = '/workspace/vision_ws/runs/dyn_seg_n/weights/best.pt'
+# YOLO weights trained 2026-10-29 (tools/train_seg.py); FFW_VISION_MODEL or model_path:= overrides
+DEFAULT_MODEL = os.path.join(get_package_share_directory('ffw_vision'), 'models',
+                             'dynamixel_seg_n.pt')
 
 
 def generate_launch_description():
