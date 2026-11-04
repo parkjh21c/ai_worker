@@ -3,8 +3,8 @@ import threading
 import warnings
 
 from ffw_grasp.grasp_planner import (
-    fit_basket, GraspParams, matrix_to_quat, merge_planes, merge_targets, pick_object,
-    pick_target, plan_grasp, quat_to_matrix, Target)
+    fit_basket, GraspParams, matrix_to_quat, merge_planes, merge_targets, near_any, on_plane,
+    pick_target, plan_grasp, quat_to_matrix, rank_objects, Target)
 from ffw_grasp.overlay import draw_basket, draw_grasp
 from ffw_vision.camera_config import declare_camera_parameters, load_camera_config
 from ffw_vision.depth_stats import color_from_msg, depth_from_msg
@@ -31,6 +31,17 @@ BUFFER_SIZE = 30
 TF_TIMEOUT = Duration(seconds=0.5)
 LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 SPIN_TIMEOUT_SEC = 0.1
+
+
+class PlanFailure(ValueError):
+    """A plan that found no grasp; kind (first word of the plan message) says what to do:
+    empty = no object seen, unsure = objects seen but none usable as a target ('?' or no
+    height), objects = every object failed (some may be skipped), skipped = every object was
+    skipped (planning again cannot help), view = camera, TF or input."""
+
+    def __init__(self, kind, text):
+        super().__init__(text)
+        self.kind = kind
 
 
 def image_msg(header, bgr):
@@ -131,6 +142,7 @@ class GraspPlannerNode(Node):
         self.declare_parameter('standing_min_height', 0.0)  # m; pose from median height, 0 = vote
         self.declare_parameter('max_camera_motion', 0.002)  # m between first and last frame
         self.declare_parameter('max_camera_turn_deg', 0.5)
+        self.declare_parameter('skip_radius', 0.025)  # m: skip_last leaves out objects this near
         self.config = load_camera_config(self)
         self.params = declare_dataclass(self, GraspParams())
         observation_topic = (self.get_parameter('observation_topic').value
@@ -139,7 +151,7 @@ class GraspPlannerNode(Node):
             raise ValueError('grasp_planner needs depth_topic and camera_info_topic')
         names = ('base_frame', 'end_effector_frame', 'depth_scale', 'frames', 'min_frames',
                  'timeout_sec', 'max_center_jitter_px', 'object_radius_px', 'standing_min_height',
-                 'max_camera_motion', 'max_camera_turn_deg')
+                 'max_camera_motion', 'max_camera_turn_deg', 'skip_radius')
         for name in names:
             setattr(self, name, self.get_parameter(name).value)
 
@@ -151,6 +163,8 @@ class GraspPlannerNode(Node):
         self.colors = {}
         self.camera_info = None
         self.rays = None  # (key, rays) cached per CameraInfo
+        self.skips = []  # base x, y of objects skip_last left out, until clear_skips
+        self.last_xy = None  # base x, y of the object the last plan chose
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
@@ -177,8 +191,10 @@ class GraspPlannerNode(Node):
         self.create_subscription(
             CameraInfo, self.config.camera_info_topic, self.on_camera_info,
             qos_profile_sensor_data, callback_group=inputs)
-        self.create_service(Trigger, 'plan', self.on_plan,
-                            callback_group=MutuallyExclusiveCallbackGroup())
+        services = MutuallyExclusiveCallbackGroup()  # one at a time: they share the skips
+        self.create_service(Trigger, 'plan', self.on_plan, callback_group=services)
+        self.create_service(Trigger, 'skip_last', self.on_skip_last, callback_group=services)
+        self.create_service(Trigger, 'clear_skips', self.on_clear_skips, callback_group=services)
         self.get_logger().info(
             f'planning from {observation_topic} into {self.base_frame} for '
             f'{self.end_effector_frame} with {self.params} on {self.config}')
@@ -228,31 +244,90 @@ class GraspPlannerNode(Node):
         with self.lock:
             self.collecting = False
             frames = self.frames_seen
+        self.last_xy = None
         try:
             response.message = self.plan(frames)
             response.success = True
             self.get_logger().info(response.message)
         except (ValueError, tf2_ros.TransformException) as error:
+            kind = error.kind if isinstance(error, PlanFailure) else 'view'
             response.success = False
-            response.message = f'{len(frames)} frames: {error}'
+            response.message = f'{kind}: {len(frames)} frames: {error}'
             self.get_logger().warn(response.message)
+        return response
+
+    def on_skip_last(self, request, response):
+        """Leave the object of the last plan out of the next plans (the arm found no path)."""
+        response.success = self.last_xy is not None
+        if response.success:
+            self.skips.append(self.last_xy)
+            self.last_xy = None
+        response.message = f'{len(self.skips)} skipped: ' + ', '.join(
+            f'({x:.3f}, {y:.3f})' for x, y in self.skips)
+        return response
+
+    def on_clear_skips(self, request, response):
+        self.skips = []
+        response.success = True
+        response.message = '0 skipped'
         return response
 
     def plan(self, frames):
         info = self.camera_info
         if info is None:
-            raise ValueError('no camera_info yet')
+            raise PlanFailure('view', 'no camera_info yet')
+        if not frames:
+            raise PlanFailure('view', f'no observation with depth in {self.timeout_sec:g} s')
         found, used = [], []
+        seen = usable = False
         for frame in frames:
             obs = frame[0]
             valid = [target_from_msg(o) for o in obs.objects
                      if o.status == ObjectObservation.STATUS_VALID]
+            seen = seen or bool(obs.objects)
+            usable = usable or pick_target(valid) is not None
             if pick_target(valid) is not None and obs.has_support_plane:
                 found.append(valid)
                 used.append(frame)
-        # one object over the frames: the highest median score (one per plan)
-        targets, which, seen = pick_object(found, self.object_radius_px, self.min_frames)
-        used = [used[i] for i in which]
+        if not found:
+            if not seen:
+                raise PlanFailure('empty', 'no object in any frame')
+            if usable:
+                raise PlanFailure('view', 'no support plane in the frames with a target')
+            raise PlanFailure('unsure', "objects seen but none usable ('?' or no height)")
+        # objects best first (highest median score); the first one with a grasp wins
+        ranked = rank_objects(found, self.object_radius_px, self.min_frames)
+        seen = sum(len(targets) >= self.min_frames for targets, _ in ranked)
+        reasons, failed, skipped = [], None, 0
+        for n, (targets, which) in enumerate(ranked, 1):
+            try:
+                result = self.plan_object(targets, [used[i] for i in which], info, len(frames))
+            except PlanFailure:
+                raise
+            except ValueError as error:
+                skipped += str(error).startswith('skipped')
+                reasons.append(f'#{n} {error}')
+                continue
+            grasp = result[0]
+            if grasp.chosen is None:
+                reasons.append(f'#{n} {grasp_summary(grasp)}')
+                failed = failed or result
+                continue
+            self.publish_object(*result)
+            self.last_xy = result[-1]
+            others = (f' (object {n} of {len(ranked)}; ' + '; '.join(reasons) + ')' if n > 1
+                      else f' (highest score of {seen} objects)' if seen > 1 else '')
+            return f'{result[1]}{others}; {len(grasp.options)} options'
+        if failed is not None:
+            self.publish_object(*failed)  # the scene and the image of the best object tried
+        raise PlanFailure('skipped' if skipped == len(ranked) else 'objects',
+                          f'{len(ranked)} objects, none graspable: '
+                          + '; '.join(reasons))
+
+    def plan_object(self, targets, used, info, total):
+        """Grasp of one object over its frames: (grasp, summary, basket, plane, rotation,
+        translation, stamp, color, base x, y). ValueError = this object only; PlanFailure =
+        the view (no other object would do better)."""
         planes = [frame[0].support_plane for frame in used]
         target, kept = merge_targets(targets, self.max_center_jitter_px, self.min_frames,
                                      self.standing_min_height)
@@ -261,7 +336,8 @@ class GraspPlannerNode(Node):
         first, last = kept_frames[0][0].header, kept_frames[-1][0].header
         size = (kept_frames[-1][0].image_width, kept_frames[-1][0].image_height)
         if (info.width, info.height) != size:
-            raise ValueError(f'camera_info {info.width}x{info.height} does not match image')
+            raise PlanFailure('view', f'camera_info {info.width}x{info.height} does not match'
+                              ' image')
 
         # camera must not move while the frames are merged
         r0, t0 = self.lookup(self.base_frame, first.frame_id, Time.from_msg(first.stamp))
@@ -270,7 +346,15 @@ class GraspPlannerNode(Node):
         moved = np.linalg.norm(translation - t0)
         turned = math.degrees(math.acos(np.clip((np.trace(r0.T @ rotation) - 1) / 2, -1, 1)))
         if moved > self.max_camera_motion or turned > self.max_camera_turn_deg:
-            raise ValueError(f'camera moved {moved * 1000:.1f}mm {turned:.1f}deg while observing')
+            raise PlanFailure('view', f'camera moved {moved * 1000:.1f}mm {turned:.1f}deg'
+                              ' while observing')
+        p = self.params
+        bias = np.array([p.camera_x_bias, p.camera_y_bias, p.camera_z_bias])
+        top = on_plane(target.u, target.v, info.k, info.d, plane[0], plane[1],
+                       target.top_height)
+        xy = tuple(float(c) for c in (rotation @ top + translation - bias)[:2])
+        if near_any(xy, self.skips, self.skip_radius):
+            raise ValueError(f'skipped at ({xy[0]:.3f}, {xy[1]:.3f}): no arm path before')
         ee_rotation, _ = self.lookup(self.base_frame, self.end_effector_frame, Time())
 
         depths = np.stack([depth_from_msg(f[1], self.depth_scale) for f in kept_frames])
@@ -286,35 +370,42 @@ class GraspPlannerNode(Node):
         grasp = plan_grasp(target, plane, depth, info.k, info.d, self.rays_for(info),
                            rotation, translation, ee_rotation[:, 1], self.params,
                            [targets[i] for i in kept], basket)
-        self.publish_scene(grasp, basket, plane, rotation, translation, last.stamp)
-        summary = (f'{grasp_summary(grasp)} frames {len(kept)}/{len(frames)}'
-                   + (f' (highest score of {seen} objects)' if seen > 1 else '') + ';'
+        summary = (f'{grasp_summary(grasp)} frames {len(kept)}/{total};'
                    f' {basket_summary(basket, basket_reason, self.params)}'
                    f' ({bias_summary(self.params)})')
+        return (grasp, summary, (basket, basket_reason), plane, rotation, translation,
+                last.stamp, (color, image), xy)
+
+    def publish_object(self, grasp, summary, basket, plane, rotation, translation, stamp,
+                       color, xy):
+        """Scene and debug image of one planned object; with a grasp also its poses."""
+        info = self.camera_info
+        basket = basket[0]
+        self.publish_scene(grasp, basket, plane, rotation, translation, stamp)
+        color, image = color
         if image is not None:
             out = draw_grasp(image, grasp, info.k, info.d, self.params, overlay_text(grasp))
             if basket is not None:
                 out = draw_basket(out, basket, plane[0], info.k, info.d, self.params)
             self.debug_pub.publish(image_msg(color.header, out))
         if grasp.chosen is None:
-            raise ValueError(summary)
-        self.grasp_pub.publish(pose_msg(self.base_frame, last.stamp, grasp.position,
+            return
+        self.grasp_pub.publish(pose_msg(self.base_frame, stamp, grasp.position,
                                         grasp.rotation))
-        self.hover_pub.publish(pose_msg(self.base_frame, last.stamp, grasp.hover,
+        self.hover_pub.publish(pose_msg(self.base_frame, stamp, grasp.hover,
                                         grasp.rotation))
         self.opening_pub.publish(Float64(data=float(grasp.chosen.opening)))
         options = PoseArray()
         options.header.frame_id = self.base_frame
-        options.header.stamp = last.stamp
-        info = []
+        options.header.stamp = stamp
+        rows = []
         for o in grasp.options:
-            options.poses.append(pose_msg(self.base_frame, last.stamp, o.position,
+            options.poses.append(pose_msg(self.base_frame, stamp, o.position,
                                           o.rotation).pose)
-            info += [float(o.opening), float(o.tilt), 0.0 if o.name == 'A' else 1.0,
+            rows += [float(o.opening), float(o.tilt), 0.0 if o.name == 'A' else 1.0,
                      float(o.wrist_turn), float(o.roll), float(o.backup)]
-        self.info_pub.publish(Float64MultiArray(data=info))
+        self.info_pub.publish(Float64MultiArray(data=rows))
         self.options_pub.publish(options)
-        return f'{summary}; {len(grasp.options)} options'
 
     def publish_scene(self, grasp, basket, plane, rotation, translation, stamp):
         """Table under the object, object top and basket bottom, true base frame (camera bias

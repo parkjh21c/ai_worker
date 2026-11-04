@@ -11,7 +11,7 @@ movej(같은 팔 컨트롤러에 명령을 보냄)는 켜지 않는다.
 ```bash
 ros2 run ffw_pick pick_moveit --verbose                           # 계획만: RViz Planned Path, 팔 안 움직임
 ros2 run ffw_pick pick_moveit --run --step --release-home          # 1 회, 동작마다 Enter (q = 멈춤)
-ros2 run ffw_pick pick_moveit --run --release-home --cycles 0      # 실패하거나 Ctrl+C 까지 반복
+ros2 run ffw_pick pick_moveit --run --release-home --cycles 0      # 바구니가 빌 때까지 (실패·Ctrl+C 면 멈춤)
 ros2 run ffw_pick pick_moveit --gripper 0                          # 그리퍼만 (rad, 0 = 열림)
 ros2 run ffw_pick pick_moveit --home                               # 10 cm 올린 뒤 HOME (구간마다 확인)
 ros2 run ffw_pick pick_moveit --check-state                        # move_group 상태 = /joint_states 인지
@@ -19,7 +19,8 @@ ros2 run ffw_pick pick_moveit --check-state                        # move_group 
 
 - `--run`: 열기 → 접근(관절 보간 + 손가락 축 직선) → 닫기 → 들기 15 cm(`--lift`, 실제 자세에서 다시 계획) → 유지
 - `--release-home`: 들어 올린 자리에서 완전히 열어 놓고, 수직 10 cm(`--home-lift`) 뒤 HOME(초기 자세 3). `--cycles N` 으로 반복.
-  빈손(닫은 그리퍼가 `gripper_table.yaml` 의 `hold_below` 0.94 rad 보다 더 닫힘)이면 HOME 뒤 다시 plan, 연속 2 번이면 멈춤
+  빈손(닫은 그리퍼가 `gripper_table.yaml` 의 `hold_below` 0.94 rad 보다 더 닫힘)이면 HOME 뒤 처음부터(제외 목록 비움), 연속 `empty_tries`(3) 번이면 멈춤
+- 실패 복구 (2026-11-04): plan 실패는 `ffw_grasp` 가 이미 다른 물체까지 본 결과 → `view`·물체가 아직 움직이는 경우를 위해 `plan_tries`(3) 번 다시 보고, `objects`·`unsure` 면 "no object graspable" 로 멈춤(`skipped` = 모든 물체 제외면 다시 보지 않고 바로). `NO SOLUTION` → `skip_last` 로 그 물체를 빼고 다시 plan(계획만 할 때도). 집기 성공 → 제외 목록 비움. `empty` 연속 2 번 → `basket empty` 출력 후 끝(종료 코드 0). 끝에 `summary:` 한 줄(사이클·집음·빈손·다른 물체·다시 본 횟수)
 - `--put-back`: 유지 뒤 제자리에 내려놓고 손가락 축으로 빠져 시작 자세로
 - Ctrl+C: 지금 동작을 취소하고 그 자리에 멈춘다
 - 장면: `ffw_grasp` 가 잰 바구니(바닥 + 기울어진 벽 4)·탁자 + 손끝에 손가락 연장 상자. 손가락-벽 충돌도 검사(`--allow-finger-walls` 로 허용)

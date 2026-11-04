@@ -195,14 +195,14 @@ def pick_target(targets):
     return max(measured, key=lambda t: t.score) if measured else None
 
 
-def pick_object(frames, radius, min_count):
-    """Targets of one object over frames: (targets, frame indices, objects seen).
+def rank_objects(frames, radius, min_count):
+    """Objects over frames, best first: [(targets, frame indices)].
 
     frames: per frame, the targets Vision found. Targets with a measured height are matched
     to the objects of the frames before by center (nearest first, one per object and frame,
-    within radius px), others start a new object. The object seen in min_count frames or
-    more with the highest median score wins (the best of a single frame may change between
-    two objects). objects seen = how many were seen in min_count frames or more.
+    within radius px), others start a new object. Order: seen in min_count frames or more
+    first, then the higher median score (the best of a single frame may change between two
+    objects), then more frames.
     """
     objects = []  # [last center, [(frame index, target)]]
     for f, targets in enumerate(frames):
@@ -225,9 +225,21 @@ def pick_object(frames, radius, min_count):
 
     def rank(o):
         return len(o[1]) >= min_count, float(np.median([t.score for _, t in o[1]])), len(o[1])
-    best = max(objects, key=rank)
-    seen = sum(len(o[1]) >= min_count for o in objects)
-    return [t for _, t in best[1]], [f for f, _ in best[1]], seen
+    objects.sort(key=rank, reverse=True)  # stable: ties keep the first seen first
+    return [([t for _, t in o[1]], [f for f, _ in o[1]]) for o in objects]
+
+
+def pick_object(frames, radius, min_count):
+    """The best object of rank_objects: (targets, frame indices, objects seen in min_count
+    frames or more)."""
+    ranked = rank_objects(frames, radius, min_count)
+    seen = sum(len(targets) >= min_count for targets, _ in ranked)
+    return ranked[0][0], ranked[0][1], seen
+
+
+def near_any(xy, points, radius):
+    """True if xy is within radius of one of points (base x, y)."""
+    return any(math.hypot(xy[0] - p[0], xy[1] - p[1]) <= radius for p in points)
 
 
 def circular_mean(angles, period):

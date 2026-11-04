@@ -5,8 +5,8 @@ import unittest
 import cv2
 from ffw_grasp.grasp_planner import (
     away_roll_sign, backup_rolls, Basket, fit_basket, GraspParams, matrix_to_quat, merge_planes,
-    merge_targets, pick_object, pick_target, plan_grasp, quat_to_matrix, Target, top_face, UP,
-    veil_pixels)
+    merge_targets, near_any, pick_object, pick_target, plan_grasp, quat_to_matrix, rank_objects,
+    Target, top_face, UP, veil_pixels)
 from ffw_vision.blob_detector import normalize_angle
 from ffw_vision.seg_detector import pixel_rays, project
 import numpy as np
@@ -434,6 +434,21 @@ class TestMerge(unittest.TestCase):
         self.assertEqual({t.u for t in targets}, {108.0})
         self.assertEqual(len(targets), 8)
         self.assertEqual(seen, 2)
+
+    def test_rank_objects_best_first(self):
+        # 0.9 seen in 3 frames only goes after the ones seen in 7 or more
+        frames = [[target(u=100.0, score=0.6), target(u=200.0, score=0.8)] for _ in range(8)]
+        for i in range(3):
+            frames[i].append(target(u=300.0, score=0.9))
+        ranked = rank_objects(frames, 10.0, 7)
+        self.assertEqual([targets[0].u for targets, _ in ranked], [200.0, 100.0, 300.0])
+        self.assertEqual(ranked[2][1], [0, 1, 2])
+        self.assertEqual(pick_object(frames, 10.0, 7)[0], ranked[0][0])
+
+    def test_near_any(self):
+        self.assertFalse(near_any((0.5, -0.2), [], 0.025))
+        self.assertTrue(near_any((0.5, -0.2), [(0.6, 0.0), (0.52, -0.21)], 0.025))
+        self.assertFalse(near_any((0.5, -0.2), [(0.53, -0.21)], 0.025))
 
     def test_outlier_frame_dropped(self):
         frames = [target(u=100.0 + 0.1 * i) for i in range(9)] + [target(u=130.0)]

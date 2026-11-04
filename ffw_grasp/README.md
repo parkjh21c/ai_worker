@@ -9,7 +9,7 @@
 
 처리 순서:
 
-1. 프레임마다 `STATUS_VALID` 이고 `top_height` 가 있는 물체 중 점수가 가장 높은 것 하나 (+ `support_plane`)
+1. 프레임마다 `STATUS_VALID` 이고 `top_height` 가 있는 물체를 프레임 사이에서 같은 물체끼리 묶고(`object_radius_px`), `min_frames` 이상 보인 것 → 점수 중앙값 높은 순으로 줄 세움. **2~6 을 그 순서대로 물체마다** 하고 집을 수 있는 첫 물체를 낸다(2026-11-04 실패 복구: 1 등이 막혀도 다른 물체). `skip_last` 로 뺀 위치에서 `skip_radius`(2.5 cm) 안의 물체는 건너뜀
 2. 중심이 중앙값에서 `max_center_jitter_px` 넘게 떨어진 프레임, 다수와 자세(`pose_label`)가 다른 프레임은 버림. 남은 것이 `min_frames` 미만이면 실패(버린 이유별 개수 출력).
    정사각형 판정(`angle_period`)이 프레임마다 다르면 버리지 않고 '어느 변이 긴지 불확실'(짧은 주기)로 본다 — 줄여 잰 윗면 비율이 기준 근처면 판정이 흔들림
 3. 자세·점수·높이는 남은 프레임의 중앙값, 탁자 평면 중앙값, 픽셀별 depth 중앙값
@@ -49,6 +49,8 @@
 | 출력 (namespace `/ffw_grasp/<camera_id>`) | 내용 |
 |---|---|
 | `plan` (서비스) | 응답 `success`, `message`(자세·후보·벌림·좌표·손목 회전·탁자 z·사용 프레임 수 또는 실패 이유) |
+| `skip_last`, `clear_skips` (서비스, `Trigger`) | 마지막 plan 이 고른 물체 위치(base x, y)를 다음 plan 에서 뺌 / 뺀 목록 비움. `pick_moveit` 이 MoveIt NO SOLUTION 뒤·집기 성공·빈손 뒤에 부름 |
+| 실패 응답의 첫 단어 | `empty`(물체 0 개) · `unsure`(물체는 있으나 `?`·높이 없음뿐) · `objects`(모든 물체 막힘, 일부는 제외일 수 있음, 물체별 이유 `#1 …; #2 …`) · `skipped`(모든 물체가 제외됨 = 다시 봐도 같음) · `view`(camera_info·TF·카메라 움직임·평면 없음) |
 | `grasp_pose` | `geometry_msgs/PoseStamped`, `base_frame` 기준 `end_effector_frame` 목표(손끝이 아님, 응답의 `tip z` 가 손끝). stamp = 마지막 관측 촬영 시각 |
 | `hover_pose` | 같은 방향, `hover_height` 위 |
 | `gripper_opening` | `std_msgs/Float64`, 벌림(m). 그리퍼 관절 값으로 바꾸는 것은 아직 없음 |

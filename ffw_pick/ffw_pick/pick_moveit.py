@@ -16,7 +16,11 @@ passes (stop only when none does; a big motion is refused only when it collides)
 --run: open -> approach -> close -> lift (replanned from where the arm stopped) -> hold.
 --put-back then goes straight down, releases, and returns up the finger axis to the start pose.
 --release-home instead opens the gripper up there and returns to HOME (initial pose 3);
---cycles N repeats plan -> pick -> release -> HOME (0 = until a cycle fails or Ctrl+C).
+--cycles N repeats plan -> pick -> release -> HOME (0 = until the basket is empty, a cycle
+fails or Ctrl+C). Recovery (user 2026-11-04): a failed plan = ffw_grasp already tried the other
+objects; a camera/TF failure or a still settling object is planned again; NO SOLUTION = that
+object is skipped (ffw_grasp skip_last) and another one planned; empty fingers = start over
+(skips cleared); no object seen twice = basket empty (exit 0). A summary line closes the run.
 --step asks before every motion; Ctrl+C cancels the running motion (the arm stops there).
 Needs bringup (robot_description), pick_demo (grasp planner) and move_group; movej must not run.
 """
@@ -152,6 +156,22 @@ def search_tiers(options, home_rot):
     normal = sorted((e for e in entries if not options[e[1]].get('backup')),
                     key=lambda e: (round(e[0], 3), e[1], e[2]))
     return normal, [e for e in entries if options[e[1]].get('backup')]
+
+
+PLAN_KINDS = ('empty', 'unsure', 'objects', 'skipped', 'view')  # of a failed ffw_grasp plan
+
+
+def plan_kind(message):
+    """What a failed ffw_grasp plan says to do (PLAN_KINDS); an older message = view."""
+    word = message.split(':', 1)[0].strip()
+    return word if word in PLAN_KINDS else 'view'
+
+
+def summary_line(tally, ended):
+    """One line for the end of a run: tally counts (picked, empty_hand, switch, replan)."""
+    return (f'summary: {tally.get("cycle", 0)} cycles, {tally.get("picked", 0)} picked,'
+            f' {tally.get("empty_hand", 0)} empty fingers, {tally.get("switch", 0)} other'
+            f' objects after NO SOLUTION, {tally.get("replan", 0)} plans again; ended: {ended}')
 
 
 def limit_margin(chain, joints, values):
@@ -359,6 +379,8 @@ def main():
     node.create_subscription(Float64MultiArray, f'{args.ns}/grasp_candidate_info',
                              lambda m: got.update(info=list(m.data)), latched)
     plan_client = node.create_client(Trigger, f'{args.ns}/plan')
+    skip_client = node.create_client(Trigger, f'{args.ns}/skip_last')
+    clear_client = node.create_client(Trigger, f'{args.ns}/clear_skips')
     scene_client = node.create_client(ApplyPlanningScene, '/apply_planning_scene')
     get_scene_client = node.create_client(GetPlanningScene, '/get_planning_scene')
     valid_client = node.create_client(GetStateValidity, '/check_state_validity')
@@ -930,11 +952,56 @@ def main():
         return None
 
     log = []
+    tally = {}  # counts for the summary line
 
-    outcome = {}  # of the last pick_once: held = the object stayed in the gripper
+    def count(name):
+        tally[name] = tally.get(name, 0) + 1
 
-    def pick_once(cycle):
-        """One plan -> search -> (with --run) pick; 0 = done, 1 = stopped."""
+    def plan_until_usable():
+        """Plan calls until one has a grasp and its basket: '' or why it stopped (basket
+        empty, stuck = no object graspable, stop = no usable view)."""
+        empty = 0
+        for attempt in range(1, pick_cfg.plan_tries + 1):
+            if attempt > 1:
+                count('replan')
+                print(f'  plan again in {pick_cfg.retry_wait:.0f} s'
+                      f' ({attempt - 1}/{pick_cfg.plan_tries - 1})')
+                spin(pick_cfg.retry_wait)
+            poses.clear()
+            for key in ('opening', 'candidates', 'info'):
+                got.pop(key, None)
+            asked = time.time()
+            result = call(plan_client, Trigger.Request(), 20.0)
+            message = result.message if result else 'view: no answer'
+            print(f'plan: {message} ({time.time() - asked:.1f} s)')
+            if result is None or not result.success:
+                kind = plan_kind(message)
+                empty = empty + 1 if kind == 'empty' else 0
+                if empty >= 2:  # twice in a row: a dropped object has settled by then
+                    return 'basket empty'
+                if kind == 'skipped':  # every object left out after NO SOLUTION: same again
+                    return 'stuck'
+                if attempt == pick_cfg.plan_tries:
+                    return 'stuck' if kind in ('objects', 'unsure') else 'stop'
+                continue
+            spin(3.0, lambda: all(k in poses for k in ('grasp', 'hover', 'basket'))
+                 and 'opening' in got and 'joints' in got and 'candidates' in got
+                 and 'info' in got)
+            if 'grasp' not in poses or 'hover' not in poses or 'opening' not in got:
+                print('  no grasp poses arrived after the plan')
+            elif ('basket' not in poses
+                  or poses['basket'].header.stamp != poses['grasp'].header.stamp):
+                print('  the basket was not measured in this plan (see the plan message): not'
+                      ' planning without the walls')
+            else:
+                return ''
+            if attempt == pick_cfg.plan_tries:
+                return 'stop'
+        return 'stop'
+
+    def pick_once():
+        """One plan -> search -> (with --run) pick. 'ok' = planned (and with --run held),
+        'empty hand', 'no path' (NO SOLUTION), 'basket empty', 'stuck' or 'stop'."""
         log.clear()
         if args.release_home:
             spin(2.0, lambda: 'joints' in got)
@@ -942,41 +1009,30 @@ def main():
                       for n, h in zip(arm_joints, home_pose))
             if off > arm_cfg.home_tolerance:
                 print(f'the arm is {off:.2f} rad from HOME (initial pose 3): move it there first')
-                return 1
+                return 'stop'
         if not args.no_plan:
             if not plan_client.wait_for_service(timeout_sec=5.0):
                 print(f'no {args.ns}/plan: is pick_demo running?')
-                return 1
-            tries = pick_cfg.plan_tries if cycle > 1 else 1
-            for attempt in range(1, tries + 1):
-                poses.clear()
-                for key in ('opening', 'candidates', 'info'):
-                    got.pop(key, None)
-                asked = time.time()
-                result = call(plan_client, Trigger.Request(), 20.0)
-                print(f'plan: {result.message if result else "no answer"}'
-                      f' ({time.time() - asked:.1f} s)')
-                if result is not None and result.success:
-                    break
-                if attempt == tries:
-                    if cycle > 1:
-                        print(f'stopping: plan failed {tries} times (basket empty?)')
-                    return 1
-                print(f'  plan again in {pick_cfg.retry_wait:.0f} s ({attempt}/{tries})')
-                spin(pick_cfg.retry_wait)
-        spin(3.0, lambda: all(k in poses for k in ('grasp', 'hover', 'basket'))
-             and 'opening' in got and 'joints' in got and 'candidates' in got and 'info' in got)
-        if 'grasp' not in poses or 'hover' not in poses or 'opening' not in got:
-            print('no grasp poses: call the plan service')
-            return 1
-        if 'basket' not in poses or poses['basket'].header.stamp != poses['grasp'].header.stamp:
-            print('the basket was not measured in this plan (see the plan message): not planning'
-                  ' without the walls')
-            return 1
+                return 'stop'
+            stopped = plan_until_usable()
+            if stopped:
+                return stopped
+        else:
+            spin(3.0, lambda: all(k in poses for k in ('grasp', 'hover', 'basket'))
+                 and 'opening' in got and 'joints' in got and 'candidates' in got
+                 and 'info' in got)
+            if 'grasp' not in poses or 'hover' not in poses or 'opening' not in got:
+                print('no grasp poses: call the plan service')
+                return 'stop'
+            if ('basket' not in poses
+                    or poses['basket'].header.stamp != poses['grasp'].header.stamp):
+                print('the basket was not measured in this plan (see the plan message): not'
+                      ' planning without the walls')
+                return 'stop'
         missing = [n for n in chain.moving() if n not in got.get('joints', {})]
         if missing:
             print(f'joints missing in /joint_states: {missing}')
-            return 1
+            return 'stop'
         now = current()
         basket_position, basket_rotation = pose_parts(poses['basket'])
         floor_z = basket_position[2] + task['floor_height']
@@ -987,7 +1043,7 @@ def main():
                              (get_scene_client, '/get_planning_scene')):
             if not client.wait_for_service(timeout_sec=5.0):
                 print(f'no {name}: is move_group running?')
-                return 1
+                return 'stop'
         scene_opening['basket'] = (basket_position, basket_rotation)
         fingers_for(options[0]['opening'])
         yaw = math.degrees(math.atan2(basket_rotation[1, 0], basket_rotation[0, 0]))
@@ -998,7 +1054,7 @@ def main():
         start_bad = bad_states([now], coarse=1)
         if start_bad:
             print(f'the start pose is in collision with the scene: {start_bad}')
-            return 1
+            return 'stop'
 
         started = time.time()
         found = search_approach(options, now, args.lift)
@@ -1007,7 +1063,7 @@ def main():
             print('\n'.join(f'  {line}' for line in log))
         if found is None:
             print('NO SOLUTION: every option above failed; the arm is not moved')
-            return 1
+            return 'no path'
         option, rotation, approach, how, grasp_values, lift, outbound = found
         print(f'chosen: {option["label"]} - {how}')
         lift_end = option['position'] + np.array([0.0, 0.0, args.lift])
@@ -1026,7 +1082,7 @@ def main():
                                       chain, arm_joints, tip_below, floor_z)))
         if not args.run:
             print('plan ok: shown in RViz (Planned Path); the arm was not moved (--run to move)')
-            return 0
+            return 'ok'
 
         # bringup's cyclo_teleoperation publishes there only while teleoperating: count messages
         commands.clear()
@@ -1036,7 +1092,7 @@ def main():
                               node.get_publishers_info_by_topic(arm_cfg.controller_topic))
             print(f'{len(commands)} commands/s arrive on {arm_cfg.controller_topic} (from {names};'
                   ' movej or teleoperation?): stop it first')
-            return 1
+            return 'stop'
         table = gripper.table
         opening = option['opening']
         open_joint = joint_for(table, opening)
@@ -1069,11 +1125,10 @@ def main():
         if held:
             spin(0.3)
             held = holding('lifted')  # slipped out while lifting = closes the rest of the way
-        outcome['held'] = held
         if not held and not args.release_home:
             print(f'stopped: nothing in the gripper. Open it (--gripper {table[0][0]:.1f})'
                   ' and go back (--home)')
-            return 1
+            return 'stop'
         if args.release_home:
             print(f'holding {args.hold:.0f} s')
             spin(args.hold)
@@ -1113,11 +1168,11 @@ def main():
                 ask(f'home {i}/{len(home_segments)}?')
                 run_trajectory(seg, f'back to HOME {i}/{len(home_segments)}')
             print('done' if held else 'back at HOME with nothing picked')
-            return 0
+            return 'ok' if held else 'empty hand'
         if not args.put_back:
             print(f'holding. Put it down by hand: pick_run.py --gripper {open_joint:.3f},'
                   ' then pick_run.py --home (movej needed) or RViz init')
-            return 0
+            return 'ok'
         print(f'holding {args.hold:.0f} s')
         spin(args.hold)
         down, down_how = plan_line(current(), option['position'], rotation, 'down')
@@ -1143,7 +1198,7 @@ def main():
             ask(f'back {i}/{len(back_segments)}?')
             run_trajectory(seg, f'back to the start pose {i}/{len(back_segments)}')
         print('done')
-        return 0
+        return 'ok'
 
     try:
         if args.gripper is not None:  # no movej needed: the arm controller's action
@@ -1163,22 +1218,58 @@ def main():
         if args.home:
             return go_home()
         spin(1.0)  # old latched messages arrive first; only the new plan counts
+
+        def clear_skips():
+            if not args.no_plan and clear_client.wait_for_service(timeout_sec=2.0):
+                call(clear_client, Trigger.Request())
+
+        # ffw_grasp keeps its skips between runs; an older ffw_grasp has no skip services
+        if not args.no_plan and not clear_client.wait_for_service(timeout_sec=5.0):
+            print(f'no {args.ns}/clear_skips: restart pick_demo (older ffw_grasp)')
+            return 1
+        clear_skips()
         cycles = args.cycles if args.release_home else 1
-        cycle, empty = 0, 0
-        while cycles == 0 or cycle < cycles:
-            cycle += 1
+        empty, status = 0, ''
+        while cycles == 0 or tally.get('cycle', 0) < cycles:
+            count('cycle')
             if cycles != 1:
-                print(f'=== cycle {cycle}' + (f'/{cycles}' if cycles else '') + ' ===')
-            outcome.clear()
-            if pick_once(cycle):
-                return 1
-            empty = 0 if outcome.get('held', True) else empty + 1
-            if empty >= pick_cfg.empty_tries:
-                print(f'stopping: {empty} picks in a row came up empty')
-                return 1
-        return 0
+                print(f'=== cycle {tally["cycle"]}' + (f'/{cycles}' if cycles else '') + ' ===')
+            status = pick_once()
+            while status == 'no path' and not args.no_plan:
+                skipped = call(skip_client, Trigger.Request())
+                if skipped is None or not skipped.success:
+                    print('stopping: could not skip the object (skip_last failed)')
+                    status = 'stop'
+                    break
+                count('switch')
+                print(f'other object ({skipped.message})')
+                status = pick_once()
+            if status == 'ok':
+                if args.run:
+                    count('picked')
+                empty = 0
+                clear_skips()  # a neighbor is gone: a skipped object may be free now
+            elif status == 'empty hand':
+                count('empty_hand')
+                empty += 1
+                clear_skips()
+                if empty >= pick_cfg.empty_tries:
+                    status = f'{empty} picks in a row came up empty'
+                    break
+                print('empty fingers: start over (skips cleared)')
+            else:
+                break
+        ended = {'ok': 'done', 'basket empty': 'basket empty',
+                 'stuck': 'no object graspable (needs a person, or a push later)',
+                 'no path': 'NO SOLUTION', 'stop': 'stopped (see above)'}.get(status, status)
+        if status == 'basket empty':
+            print('basket empty')
+        print(summary_line(tally, ended))
+        return 0 if status in ('ok', 'basket empty') else 1
     except RuntimeError as error:
         print(f'stopped: {error}')
+        if tally:
+            print(summary_line(tally, 'stopped (motion or HOME path)'))
         return 1
     except KeyboardInterrupt:
         handle = active.pop('handle', None)

@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from ffw_pick.pick_moveit import search_tiers
+from ffw_pick.pick_moveit import plan_kind, search_tiers, summary_line
 import numpy as np
 
 
@@ -29,3 +29,22 @@ class TestSearchTiers(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestRecovery(unittest.TestCase):
+
+    def test_plan_kind(self):
+        self.assertEqual(plan_kind('empty: 10 frames: no object in any frame'), 'empty')
+        self.assertEqual(plan_kind('objects: 10 frames: 2 objects, none graspable: #1 ...'),
+                         'objects')
+        self.assertEqual(plan_kind("unsure: 10 frames: objects seen but none usable"), 'unsure')
+        self.assertEqual(plan_kind('skipped: 10 frames: 1 objects, none graspable: #1 skipped'),
+                         'skipped')
+        # older ffw_grasp (no kind) and anything unknown: plan the same view again
+        self.assertEqual(plan_kind('10 frames: only 4 of 4 frames agree'), 'view')
+        self.assertEqual(plan_kind(''), 'view')
+
+    def test_summary_line(self):
+        line = summary_line({'cycle': 4, 'picked': 3, 'switch': 1}, 'basket empty')
+        self.assertIn('4 cycles, 3 picked, 0 empty fingers, 1 other objects', line)
+        self.assertTrue(line.endswith('ended: basket empty'))

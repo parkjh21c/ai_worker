@@ -11,7 +11,7 @@
     budget: 30.0  # s of approach search before giving up (stops early on success)
     hold: 2.0  # s held up before --put-back or --release-home
     home_lift: 0.10  # m straight up before --home and --release-home go to HOME (0 = none)
-    plan_tries: 3  # plan calls after a released object (it may still be settling)
+    plan_tries: 3  # plan calls before giving up (camera/TF, a settling object); 2 empty = done
     retry_wait: 2.0  # s between those plan calls
-    empty_tries: 2  # --release-home: picks in a row with empty fingers before the loop stops
+    empty_tries: 3  # --release-home: picks in a row with empty fingers before the loop stops
     state_tolerance: 0.01  # rad or m: move_group's robot state vs /joint_states before planning
