@@ -9,9 +9,12 @@
     frames: 10
     min_frames: 7
     object_radius_px: 10.0  # a target this close to an object of the frame before is that object
+    standing_min_height: 0.042  # pose from the median top height (same as ffw_vision's value)
     max_open: 0.090
     clearance: 0.012
     min_clearance: 0.005  # less than this per side = too wide to grasp
+    backup_clearances: [0.008, 0.005]  # narrower openings tried after the normal ones: a low
+    # object beside a wall fits only so (2026-11-03, fail_scene01: 5 mm clears MoveIt's walls too)
     finger_tip: 0.005  # at the tip
     finger_thick: 0.025  # 3 cm above the tip
     taper_height: 0.030

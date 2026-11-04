@@ -128,6 +128,7 @@ class GraspPlannerNode(Node):
         self.declare_parameter('timeout_sec', 5.0)
         self.declare_parameter('max_center_jitter_px', 3.0)
         self.declare_parameter('object_radius_px', 10.0)  # same object in the next frame
+        self.declare_parameter('standing_min_height', 0.0)  # m; pose from median height, 0 = vote
         self.declare_parameter('max_camera_motion', 0.002)  # m between first and last frame
         self.declare_parameter('max_camera_turn_deg', 0.5)
         self.config = load_camera_config(self)
@@ -137,7 +138,7 @@ class GraspPlannerNode(Node):
         if not self.config.depth_topic or not self.config.camera_info_topic:
             raise ValueError('grasp_planner needs depth_topic and camera_info_topic')
         names = ('base_frame', 'end_effector_frame', 'depth_scale', 'frames', 'min_frames',
-                 'timeout_sec', 'max_center_jitter_px', 'object_radius_px',
+                 'timeout_sec', 'max_center_jitter_px', 'object_radius_px', 'standing_min_height',
                  'max_camera_motion', 'max_camera_turn_deg')
         for name in names:
             setattr(self, name, self.get_parameter(name).value)
@@ -253,7 +254,8 @@ class GraspPlannerNode(Node):
         targets, which, seen = pick_object(found, self.object_radius_px, self.min_frames)
         used = [used[i] for i in which]
         planes = [frame[0].support_plane for frame in used]
-        target, kept = merge_targets(targets, self.max_center_jitter_px, self.min_frames)
+        target, kept = merge_targets(targets, self.max_center_jitter_px, self.min_frames,
+                                     self.standing_min_height)
         plane = merge_planes([planes[i] for i in kept])
         kept_frames = [used[i] for i in kept]
         first, last = kept_frames[0][0].header, kept_frames[-1][0].header
@@ -309,7 +311,7 @@ class GraspPlannerNode(Node):
             options.poses.append(pose_msg(self.base_frame, last.stamp, o.position,
                                           o.rotation).pose)
             info += [float(o.opening), float(o.tilt), 0.0 if o.name == 'A' else 1.0,
-                     float(o.wrist_turn), float(o.roll)]
+                     float(o.wrist_turn), float(o.roll), float(o.backup)]
         self.info_pub.publish(Float64MultiArray(data=info))
         self.options_pub.publish(options)
         return f'{summary}; {len(grasp.options)} options'

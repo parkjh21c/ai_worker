@@ -449,6 +449,18 @@ class TestMerge(unittest.TestCase):
         with self.assertRaises(ValueError):
             merge_targets(frames, 3.0, 9)
 
+    def test_pose_from_median_height(self):
+        # tilted object near the threshold: labels flip, the median height decides once
+        lying = [target(height=0.040) for _ in range(5)]
+        standing = [target(pose='standing', period=math.pi / 2, height=0.043)] * 5
+        merged, kept = merge_targets(lying + standing, 3.0, 7, 0.042)
+        self.assertEqual(len(kept), 10)
+        self.assertEqual(merged.pose_label, 'lying')
+        self.assertEqual(merged.angle_period, math.pi / 2)  # long side unsure: open wide
+        merged, kept = merge_targets(lying[:3] + standing, 3.0, 7, 0.042)
+        self.assertEqual(len(kept), 8)
+        self.assertEqual(merged.pose_label, 'standing')
+
     def test_square_flicker_is_kept_as_unsure(self):
         frames = [target() for _ in range(6)] + [target(period=math.pi / 2)] * 4
         merged, kept = merge_targets(frames, 3.0, 7)
@@ -620,6 +632,23 @@ class TestRoll(unittest.TestCase):
         rolled = g.options[n:]
         self.assertTrue(rolled and all(o.roll for o in rolled))
         self.assertLessEqual(len(rolled), 4 * len(g.candidates))
+
+    def test_narrow_opening_when_the_normal_one_is_blocked(self):
+        scene = Scene()
+        scene.raise_box(*STANDING)
+        x, y = STANDING[:2]
+        scene.raise_box(x + 0.017 + 0.040, y, 0.010, 0.120, 0.0, 0.075)
+        scene.raise_box(x, y + 0.01425 + 0.040, 0.120, 0.010, 0.0, 0.075)
+        target = scene.target(*STANDING, period=math.pi / 2, pose='standing')
+        params = replace(PARAMS, **FINGERS)
+        self.assertIsNone(scene.plan(target, params=params).chosen)
+        g = scene.plan(target, params=replace(params, backup_clearances=(0.008, 0.005)))
+        self.assertTrue(g.chosen.backup)
+        self.assertAlmostEqual(g.chosen.opening, g.chosen.grip + 2 * 0.005)
+        # the measured top stays the object's, not a backup opening
+        self.assertAlmostEqual(g.length_m, STANDING[2], delta=0.003)
+        self.assertAlmostEqual(g.width_m, STANDING[3], delta=0.003)
+        self.assertTrue(all(o.backup and o.opening < 0.034 + 2 * 0.012 for o in g.options))
 
     def test_backup_order_leans_away_from_the_nearer_wall_first(self):
         free = {(0.3, 0.1), (0.3, -0.1), (0.2, 0.1), (0.1, 0.2), (0.1, -0.2)}

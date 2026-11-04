@@ -15,6 +15,8 @@ class GraspParams:
     max_open: float = 0.090  # gripper max opening, m
     clearance: float = 0.012  # opening beyond the object on each side
     min_clearance: float = 0.005  # less than this per side = too wide to grasp
+    backup_clearances: tuple = (0.0,)  # m per side: narrower openings tried after the normal
+    # ones; values under min_clearance are skipped (not empty: a ROS parameter needs a type)
     finger_tip: float = 0.005  # finger thickness along the closing axis at the tip
     finger_thick: float = 0.025  # ... at taper_height above the tip
     taper_height: float = 0.030
@@ -112,6 +114,8 @@ class Candidate:
     free_tilts: tuple = ()  # every unblocked tilt, largest first
     roll: float = 0.0  # rad about the across axis; + = the +close_axis fingertip is higher
     free_rolls: tuple = ()  # unblocked (tilt, roll) when no upright tilt is free
+    narrow: tuple = ()  # (opening, free tilts) at backup_clearances, widest first
+    backup: bool = False  # narrowed from its normal opening
     block_points: np.ndarray = None  # camera frame points in the more blocked finger (drawing)
 
 
@@ -149,6 +153,7 @@ class GraspOption:
     rotation: np.ndarray
     hover: np.ndarray
     roll: float = 0.0  # rad about the across axis; + = the fingertip on +y (end effector) higher
+    backup: bool = False  # narrow opening or roll: tried after every normal option
 
 
 @dataclass(frozen=True)
@@ -230,11 +235,13 @@ def circular_mean(angles, period):
     return math.atan2(np.sin(t).mean(), np.cos(t).mean()) * period / (2 * math.pi)
 
 
-def merge_targets(targets, max_jitter, min_count):
+def merge_targets(targets, max_jitter, min_count, standing_min_height=0.0):
     """Median target over frames. Returns (target, kept indices).
 
-    Frames whose center is more than max_jitter px from the median, or whose pose differs
-    from the majority, are dropped. Frames that disagree on near square (a measured ratio near
+    Frames whose center is more than max_jitter px from the median are dropped. The pose is
+    the majority label (frames with another one dropped), or with standing_min_height > 0 the
+    median top height decides it once and every frame stays (a tilted object near the
+    threshold flips between labels). Frames that disagree on near square (a measured ratio near
     the threshold) are kept: the shorter period says which side is long is unsure.
     """
     if not targets:
@@ -242,9 +249,14 @@ def merge_targets(targets, max_jitter, min_count):
     uv = np.array([(t.u, t.v) for t in targets])
     offset = np.hypot(*(uv - np.median(uv, axis=0)).T)
     near = [i for i in range(len(targets)) if offset[i] <= max_jitter]
-    poses = Counter(targets[i].pose_label for i in near)
-    pose = poses.most_common(1)[0][0] if poses else None
-    kept = [i for i in near if targets[i].pose_label == pose]
+    if standing_min_height > 0 and near:
+        height = float(np.median([targets[i].top_height for i in near]))
+        pose = 'standing' if height >= standing_min_height else 'lying'
+        kept = near
+    else:
+        poses = Counter(targets[i].pose_label for i in near)
+        pose = poses.most_common(1)[0][0] if poses else None
+        kept = [i for i in near if targets[i].pose_label == pose]
     if len(kept) < min_count:
         raise ValueError(f'only {len(kept)} of {len(targets)} frames agree on one target'
                          f' ({len(targets) - len(near)} moved over {max_jitter:g} px,'
@@ -514,20 +526,34 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
         y_cam /= np.linalg.norm(y_cam)
         tilts = sorted({max(top - i * step, 0.0) for i in range(int(top / step) + 1)} | {0.0},
                        reverse=True)
-        free, first = [], None  # every tilt is checked: the motion side may need a smaller one
-        for tilt in tilts:
-            cand_tip = tip_height_for(target.top_height, tilt, params)
-            blocked = finger_blocks(finger_points, finger_heights, center, close_axis, normal,
-                                    opening, cand_tip, params, lean_cam, tilt)
-            z_cam = math.cos(tilt) * normal + math.sin(tilt) * lean_cam
-            tip_point = center - normal * (target.top_height - cand_tip)
-            body = body_blocks(points, tip_point, np.cross(y_cam, z_cam), y_cam, z_cam, params)
-            if blocked < params.obstacle_points and body < params.obstacle_points:
-                free.append(tilt)
-                if first is None:
-                    first = (tilt, cand_tip, blocked, body)
-        if first is not None:  # the candidate is shown at its largest free tilt
-            tilt, cand_tip, blocked, body = first
+
+        def scan(width):
+            # every tilt is checked: the motion side may need a smaller one
+            free, first, last = [], None, None
+            for tilt in tilts:
+                cand_tip = tip_height_for(target.top_height, tilt, params)
+                blocked = finger_blocks(finger_points, finger_heights, center, close_axis,
+                                        normal, width, cand_tip, params, lean_cam, tilt)
+                z_cam = math.cos(tilt) * normal + math.sin(tilt) * lean_cam
+                tip_point = center - normal * (target.top_height - cand_tip)
+                body = body_blocks(points, tip_point, np.cross(y_cam, z_cam), y_cam, z_cam,
+                                   params)
+                last = (tilt, cand_tip, blocked, body)
+                if blocked < params.obstacle_points and body < params.obstacle_points:
+                    free.append(tilt)
+                    first = first or last
+            return free, first, last
+        free, first, last = scan(opening)
+        # the candidate is shown at its largest free tilt
+        tilt, cand_tip, blocked, body = first or last
+        narrow = []
+        for gap in sorted(params.backup_clearances, reverse=True):
+            narrow_open = min(params.max_open, grip + 2 * gap)  # not width: that is the top face
+            if gap < params.min_clearance or narrow_open >= opening:
+                continue
+            free_n = scan(narrow_open)[0]
+            if free_n:
+                narrow.append((narrow_open, tuple(free_n)))
         where, shown = '', None
         if first is None and blocked >= params.obstacle_points:
             # where the blocking points are: above the object = wall or a taller neighbor
@@ -541,8 +567,14 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
         z_axis = math.cos(tilt) * UP + math.sin(tilt) * lean
         candidates.append(Candidate(name, close_axis, grip, opening, max(blocked, body), reason,
                                     y, turn, tilt, z_axis, lean_cam, lean, cand_tip,
-                                    tuple(free), block_points=shown))
+                                    tuple(free), narrow=tuple(narrow) if reason != 'too wide'
+                                    else (), block_points=shown))
     usable = [c for c in candidates if not c.reason]
+    if not usable and any(c.narrow for c in candidates):
+        # nothing fits at the normal opening: the widest free narrow one is shown and chosen
+        candidates = [narrowed(c, target.top_height, params) if c.narrow else c
+                      for c in candidates]
+        usable = [c for c in candidates if not c.reason]
     if not usable and params.max_roll_deg > 0:
         candidates = [roll_candidate(c, points, center, normal, target.top_height, params,
                                      finger_points)
@@ -576,7 +608,7 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
         return grasp
     bias = np.array([params.camera_x_bias, params.camera_y_bias, params.camera_z_bias])
 
-    def option(c, tilt, roll=0.0):
+    def option(c, tilt, roll=0.0, width=None, backup=False):
         # roll is about close_axis (camera); the base y may point the other way
         base_roll = roll if c.y_axis @ (rotation @ c.close_axis) > 0 else -roll
         x_axis, y_axis, z_axis = rolled_frame(UP, c.lean_base, c.y_axis, tilt, base_roll)
@@ -585,18 +617,29 @@ def plan_grasp(target, plane, depth, k, d, rays, rotation, translation, ee_y, pa
         tip = to_base(center - normal * (target.top_height - height)) - bias
         # end effector up the finger axis; hover backs off along the same axis
         position = tip + z_axis * params.tip_below_end_effector - UP * params.arm_z_bias
-        return GraspOption(c.name, tilt, c.opening, c.wrist_turn, tip, position,
+        return GraspOption(c.name, tilt, width or c.opening, c.wrist_turn, tip, position,
                            np.column_stack((x_axis, y_axis, z_axis)),
-                           position + z_axis * params.hover_height, base_roll)
-    options = [option(c, t) for c in sorted(usable, key=lambda c: abs(c.wrist_turn))
-               for t in c.free_tilts]
-    options += [option(c, t, r) for c in sorted(usable, key=lambda c: abs(c.wrist_turn))
-                for t, r in c.free_rolls]
+                           position + z_axis * params.hover_height, base_roll,
+                           backup or c.backup or bool(roll))
+    by_turn = sorted(candidates, key=lambda c: abs(c.wrist_turn))
+    options = [option(c, t) for c in by_turn if not c.reason for t in c.free_tilts]
+    options += [option(c, t, width=w, backup=True) for c in by_turn for w, f in c.narrow
+                for t in f]
+    options += [option(c, t, r) for c in by_turn if not c.reason for t, r in c.free_rolls]
     options += [option(c, t, r) for c, t, r in backups]
     best = options[0]
     return Grasp(target, normal, center, axis, length, width, chosen.tip_height, table_z,
                  candidates, chosen, '', best.tip, best.position, best.rotation, best.hover,
                  chosen.wrist_turn, options)
+
+
+def narrowed(c, top_height, params):
+    """c at its widest free narrow opening (backup), the rest kept in narrow."""
+    width, free = c.narrow[0]
+    tilt = free[0]
+    return replace(c, opening=width, reason='', tilt=tilt, free_tilts=free, narrow=c.narrow[1:],
+                   backup=True, z_axis=math.cos(tilt) * UP + math.sin(tilt) * c.lean_base,
+                   tip_height=tip_height_for(top_height, tilt, params), block_points=None)
 
 
 def roll_grid(c, points, center, normal, top_height, params, finger_points=None):
