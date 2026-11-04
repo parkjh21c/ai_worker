@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import math
+import os
 
 import cv2
 from ffw_vision.blob_detector import normalize_angle
@@ -263,6 +264,16 @@ def detect_seg(color_bgr, depth, k, d, segments, params, rays=None):
             'unknown' if ambiguous else pose, ambiguous, float(score), top_level,
             float(length_m), float(width_m), max(contours, key=cv2.contourArea), angle_source))
     return objects, (n, plane_d)
+
+
+def resolve_model(model_path, model_file, models_dir):
+    """YOLO weights to load: model_path (launch override) wins, else model_file, a name in
+    models_dir or an absolute path."""
+    if model_path:
+        return model_path
+    if not model_file:
+        raise ValueError('no YOLO weights: set model_file in the task file or model_path:=')
+    return model_file if os.path.isabs(model_file) else os.path.join(models_dir, model_file)
 
 
 def yolo_segmenter(model_path, imgsz):

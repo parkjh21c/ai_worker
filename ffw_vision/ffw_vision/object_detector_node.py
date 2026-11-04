@@ -1,12 +1,15 @@
 import math
+import os
 
+from ament_index_python.packages import get_package_share_directory
 from ffw_vision.blob_detector import detect, DetectorParams
 from ffw_vision.camera_config import declare_camera_parameters, load_camera_config
 from ffw_vision.depth_stats import color_from_msg, depth_from_msg
 from ffw_vision.input_check import stamp_to_ns
 from ffw_vision.observation import make_object_array
 from ffw_vision.overlay import draw_blobs, draw_seg_objects
-from ffw_vision.seg_detector import detect_seg, pixel_rays, SegParams, yolo_segmenter
+from ffw_vision.seg_detector import (
+    detect_seg, pixel_rays, resolve_model, SegParams, yolo_segmenter)
 from ffw_vision_msgs.msg import ObjectObservationArray
 import rclpy
 from rclpy.executors import ExternalShutdownException
@@ -70,13 +73,20 @@ class ObjectDetectorNode(Node):
         if self.detector == 'rule':
             self.params = declare_dataclass(self, DetectorParams())
         elif self.detector == 'yolo_seg':
-            self.declare_parameter('model_path', '')
+            self.declare_parameter('model_path', '')  # launch override; empty = model_file
+            self.declare_parameter('model_file', '')  # name in share/ffw_vision/models or abs path
             self.declare_parameter('imgsz', 448)  # same as training
             self.params = declare_dataclass(self, SegParams())
             if not self.config.depth_topic or not self.config.camera_info_topic:
                 raise ValueError('yolo_seg needs depth_topic and camera_info_topic')
-            self.segment = yolo_segmenter(self.get_parameter('model_path').value,
-                                          self.get_parameter('imgsz').value)
+            model = resolve_model(
+                self.get_parameter('model_path').value, self.get_parameter('model_file').value,
+                os.path.join(get_package_share_directory('ffw_vision'), 'models'))
+            if not os.path.isfile(model):
+                raise ValueError(f'YOLO weights not found: {model}')
+            imgsz = self.get_parameter('imgsz').value
+            self.get_logger().info(f'YOLO weights {model}, imgsz {imgsz}')
+            self.segment = yolo_segmenter(model, imgsz)
         else:
             raise ValueError(f'unknown detector: {self.detector}')
         self.camera_info = None

@@ -4,7 +4,7 @@ import unittest
 
 import cv2
 from ffw_vision.blob_detector import normalize_angle
-from ffw_vision.seg_detector import detect_seg, fit_plane, project, SegParams
+from ffw_vision.seg_detector import detect_seg, fit_plane, project, resolve_model, SegParams
 import numpy as np
 
 WIDTH, HEIGHT = 424, 240
@@ -198,6 +198,17 @@ class TestDetectSeg(unittest.TestCase):
         segments = [(grow(scene.box_mask, 1), 0.3)]
         objects, _ = self.run_scene(scene, segments, replace(PARAMS, conf=0.2))
         self.assertEqual(len(objects), 1)
+
+
+
+class TestResolveModel(unittest.TestCase):
+
+    def test_override_name_and_absolute_path(self):
+        self.assertEqual(resolve_model('/tmp/best.pt', 'a.pt', '/share/models'), '/tmp/best.pt')
+        self.assertEqual(resolve_model('', 'a.pt', '/share/models'), '/share/models/a.pt')
+        self.assertEqual(resolve_model('', '/w/a.pt', '/share/models'), '/w/a.pt')
+        with self.assertRaises(ValueError):
+            resolve_model('', '', '/share/models')
 
 
 if __name__ == '__main__':

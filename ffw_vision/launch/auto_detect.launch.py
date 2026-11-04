@@ -7,10 +7,6 @@ from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 
-# YOLO weights trained 2026-10-29 (tools/train_seg.py); FFW_VISION_MODEL or model_path:= overrides
-DEFAULT_MODEL = os.path.join(get_package_share_directory('ffw_vision'), 'models',
-                             'dynamixel_seg_n.pt')
-
 
 def generate_launch_description():
     config_dir = os.path.join(get_package_share_directory('ffw_vision'), 'config')
@@ -31,8 +27,8 @@ def generate_launch_description():
                               default_value=os.path.join(config_dir, 'blue_basket.yaml')),
         DeclareLaunchArgument('model_path',
                               default_value=EnvironmentVariable('FFW_VISION_MODEL',
-                                                                default_value=DEFAULT_MODEL),
-                              description='YOLO weights for detector yolo_seg'),
+                                                                default_value=''),
+                              description='YOLO weights overriding model_file of the task file'),
         DeclareLaunchArgument('port', default_value='8765'),
         Node(
             package='ffw_vision', executable='object_detector', name='object_detector',

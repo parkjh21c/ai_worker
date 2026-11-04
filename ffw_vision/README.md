@@ -265,14 +265,15 @@ ros2 topic echo /ffw_vision/right_wrist/object_observations --once
 - 화면: 회색 = 모델 마스크, 초록/주황 = 윗면, 글자 = 자세 + 높이(mm) + 점수.
 - task 설정: `config/dynamixel_basket_seg.yaml` (초기 자세 3차, `auto_detect.launch.py` 의 기본 `task_file`).
   바구니 색(HSV)은 `config/blue_basket.yaml`(`basket_file`) — `ffw_grasp` 의 바구니 맞추기와 같은 파일.
-- 가중치: launch 인자 `model_path`. 기본은 환경 변수 `FFW_VISION_MODEL`, 없으면 이 패키지의 `models/dynamixel_seg_n.pt`(설치 후 share/ffw_vision/models, 2026-10-29 학습).
+- 가중치: task 파일의 `model_file`(지금 `dynamixel_seg_n640.pt`, 이 패키지의 `models/`, 설치 후 share/ffw_vision/models)과 학습 때 입력 크기 `imgsz`(640)를 같은 파일에서 정한다. 이름이 아니라 절대 경로도 된다. 시험할 때는 launch 인자 `model_path:=`(또는 환경 변수 `FFW_VISION_MODEL`)가 `model_file` 을 덮는다(`imgsz` 는 task 파일 값 그대로이니 맞는 모델만). 시작 로그 `YOLO weights …, imgsz …` 로 확인.
+- 지금 모델(2026-11-03): YOLO11n-seg, 입력 640, 학습 116 장(가지런한 배치 50 + 컵 쏟기·뒤집힘·기울어짐 66). 이전 모델(448, 50 장, 기울어진 물체를 두 마스크로 쪼갬)은 git `a325007` 의 `models/dynamixel_seg_n.pt`.
 - 학습 도구(`tools/`, 설치 안 함, `ultralytics` 필요):
-  `labelme_draft.py`(규칙 기반 초안) → labelme 로 다듬기 → `labelme_to_yolo.py`(YOLO-seg 데이터셋) → `train_seg.py`(yolo11n-seg, 448, 150 epoch) → `eval_seg.py`(라벨과 비교).
+  `labelme_draft.py`(규칙 기반 초안, `--model` 이면 지금 모델의 마스크로 초안) → labelme 로 다듬기 → `labelme_to_yolo.py`(YOLO-seg 데이터셋) → `train_seg.py`(yolo11n-seg, `--imgsz` 기본 448 — 지금 모델은 640, 150 epoch) → `eval_seg.py`(라벨과 비교).
   `extract_frames.py`: 녹화(bag)에서 컬러·16비트 depth·CameraInfo·TF·관절 값을 프레임별로 저장(라벨 초안과 오프라인 분석의 입력). 데이터셋(이미지 약 50 장)은 repo 밖 `/workspace/vision_ws/datasets/dynamixel_seg`.
 
 ```bash
 ros2 launch ffw_vision auto_detect.launch.py                       # camera_id:=right_wrist, port:=8765 기본
-ros2 launch ffw_vision auto_detect.launch.py model_path:=/path/to/best.pt
+ros2 launch ffw_vision auto_detect.launch.py model_path:=/path/to/best.pt   # 시험용: model_file 대신
 ```
 
 ## depth 확인 도구 `depth_probe`

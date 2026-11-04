@@ -1,6 +1,6 @@
 # Task: one DYNAMIXEL in the blue basket, right_wrist at the initial pose
 # (right arm [1.05, 0, 0, -2.27, 0, 0.35, 0], lift -0.1); thresholds from wrist2/test recordings (2026-10-29)
-# The model file is the launch argument model_path (auto_detect.launch.py); basket colour is
+# The model is model_file below (model_path:= overrides it for trials); basket colour is
 # blue_basket.yaml
 /**:
   ros__parameters:
@@ -8,7 +8,8 @@
     target_label: dynamixel
     depth_scale: 0.001
     detector: yolo_seg
-    imgsz: 448
+    model_file: dynamixel_seg_n640.pt  # in ffw_vision/models: YOLO11n-seg, 640, cup-dump data (2026-11-03)
+    imgsz: 640  # same as training of model_file
     conf: 0.5  # true detections scored 0.58 or more on val
     dup_overlap: 0.5  # masks sharing this share of the smaller one are one object
     inner_erode_px: 7  # basket rim left out of the object area

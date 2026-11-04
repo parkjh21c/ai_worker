@@ -76,7 +76,7 @@ ros2 service call /ffw_grasp/right_wrist/plan std_srvs/srv/Trigger
 ```
 
 한 번에 켜기 (bringup 다음): 손목 카메라 + 자동 검출(화면 8765, `detect_port`) + `grasp_planner` + 파지 결과 화면(8766, `grasp_port`). Ctrl+C 한 번에 카메라까지 꺼진다.
-YOLO 가중치는 환경 변수 `FFW_VISION_MODEL` 또는 `model_path:=` 로 바꾼다(기본은 `ffw_vision` README).
+YOLO 가중치는 `detect_file`(기본 `ffw_vision` 의 `dynamixel_basket_seg.yaml`)의 `model_file`·`imgsz` 로 정한다. 시험할 때는 `model_path:=` 가 `model_file` 을 덮는다(`ffw_vision` README).
 팔 컨트롤러(cyclo movej)는 포함하지 않는다.
 
 ```bash
