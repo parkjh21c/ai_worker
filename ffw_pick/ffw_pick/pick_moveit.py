@@ -7,9 +7,10 @@ passes (stop only when none does; a big motion is refused only when it collides)
   from initial pose 3 (all within --turn-window of the least: least joint motion of those that
   pass; beyond it the first that passes); for each, the path with the least joint motion over every
   analytic IK solution (analytic_ik): joint path to the line start, straight to the grasp and
-  straight up (lift); colliding solutions are left out until one passes. Rolled options
-  (ffw_grasp roll_backup) only when no upright one passes, in ffw_grasp's order; OMPL to the
-  line start last. Every path is collision checked by move_group and shown in RViz (Planned Path).
+  straight up (lift); colliding solutions are left out until one passes. Backup options
+  (ffw_grasp narrow openings and rolls) only when no normal one passes, in ffw_grasp's order;
+  OMPL to the line start last. Every path is collision checked by move_group and shown in RViz
+  (Planned Path).
   Without --run the arm is not moved.
 
 --run: open -> approach -> close -> lift (replanned from where the arm stopped) -> hold.
@@ -46,6 +47,7 @@ LINE_JUMP = 0.15  # rad: a bigger joint change between line points = wrist flip
 SAMPLE_DT = 0.05  # s between trajectory points
 CORNER = 6  # path points on each side of a corner that are rounded
 START_TRIES = 6  # line starts whose joint path collides, per grasp option, before OMPL
+HOME_EXTRA_LIFTS = 2  # --release-home: times it goes home_lift higher when HOME has no path
 BAN_TRIES = 30  # colliding solutions left out of one line before it is given up
 BOUND_SLACK = 0.02  # rad: a grasp option is skipped once its least possible joint motion is
 # this much above the best found (the search grid may undercut it by about that)
@@ -142,14 +144,14 @@ def turn_between(a, b):
 
 
 def search_tiers(options, home_rot):
-    """Upright then rolled (turn, option index, flip) entries: upright by TCP turn from
-    home_rot, rolled in the given order (ffw_grasp: leaning away from the nearer wall first)."""
+    """Normal then backup (turn, option index, flip) entries: normal by TCP turn from home_rot,
+    backups (narrow openings, rolls) in the given order (ffw_grasp's)."""
     entries = [(turn_between(home_rot, o['rotation'] @ f), oi, flip)
                for oi, o in enumerate(options)
                for flip, f in ((False, np.eye(3)), (True, FLIP))]
-    upright = sorted((e for e in entries if not options[e[1]].get('roll')),
-                     key=lambda e: (round(e[0], 3), e[1], e[2]))
-    return upright, [e for e in entries if options[e[1]].get('roll')]
+    normal = sorted((e for e in entries if not options[e[1]].get('backup')),
+                    key=lambda e: (round(e[0], 3), e[1], e[2]))
+    return normal, [e for e in entries if options[e[1]].get('backup')]
 
 
 def limit_margin(chain, joints, values):
@@ -540,9 +542,10 @@ def main():
             return None, f'Pilz error {response.error_code.val} (see move_group log)'
         return response.planned_trajectories[0], None
 
-    def plan_ompl(goal_values, start=None):
+    def plan_ompl(goal_values, start=None, seconds=3.0):
         goal = MoveGroup.Goal()
         goal.request = request('', joint_goal(goal_values), start, pipeline='ompl')
+        goal.request.allowed_planning_time = float(seconds)
         goal.request.start_state = start or RobotState(is_diff=True)
         goal.planning_options.plan_only = True
         result = action_result(move_group, goal, 30.0, 'OMPL')
@@ -647,19 +650,40 @@ def main():
             raise RuntimeError(f'{label}: {why}')
         return own_trajectory([start_values] + states), 'analytic IK line'
 
-    def plan_home(here):
-        """Segments from here to HOME: Pilz PTP, else own joint path, else OMPL (all checked)."""
+    def plan_home(here, outbound=None):
+        """Segments from here to HOME: Pilz PTP, own joint path, back the way the approach came
+        (outbound = its joint states HOME -> above, ending at above), else OMPL; all checked.
+        RuntimeError names why each one failed."""
         home = {**here, **dict(zip(arm_joints, home_pose))}
+        reasons = []
         traj, why = plan_sequence([(request('PTP', joint_goal(home)), 0.0)])
-        if traj is not None and not bad_states(traj_states(traj, here)):
+        bad = bad_states(traj_states(traj, here)) if traj is not None else ''
+        if traj is not None and not bad:
             return [traj]
+        reasons.append(f'PTP: {why or "collides " + bad}')
         joints = joint_path(arm_joints, here, home)
-        if not bad_states(joints):
+        bad = bad_states(joints)
+        if not bad:
             return [own_trajectory([here] + joints)]
-        traj, why = plan_ompl(home, state_of(here))
-        if traj is None or bad_states(traj_states(traj, here)):
-            raise RuntimeError(f'no path back to HOME ({why})')
-        return [traj]
+        reasons.append(f'joint path: collides {bad}')
+        if outbound:
+            # to the approach's line start, then its joint path backwards: passed once already
+            back = [{**here, **{n: v[n] for n in arm_joints}}
+                    for v in list(reversed(outbound[:-1]))] + [home]
+            to_above = joint_path(arm_joints, here, {**here, **{n: outbound[-1][n]
+                                                               for n in arm_joints}})
+            bad = bad_states(to_above + back)
+            traj, why = (None, f'collides {bad}') if bad else own_path([to_above, back], here)
+            if traj is not None:
+                return [traj]
+            reasons.append(f'back the way it came: {why}')
+        for _ in range(2):
+            traj, why = plan_ompl(home, state_of(here), seconds=10.0)
+            bad = bad_states(traj_states(traj, here)) if traj is not None else ''
+            if traj is not None and not bad:
+                return [traj]
+            reasons.append(f'OMPL: {why or "collides " + bad}')
+        raise RuntimeError('no path back to HOME (' + '; '.join(reasons) + ')')
 
     def ask(text, always=False):
         if (args.step or always) and input(
@@ -726,18 +750,20 @@ def main():
         cands, info = got.get('candidates'), got.get('info', [])
         out = []
         if cands is not None and cands.header.stamp == poses['grasp'].header.stamp \
-                and len(info) in (4 * len(cands.poses), 5 * len(cands.poses)):
-            width = len(info) // max(len(cands.poses), 1)  # 4 = ffw_grasp before rolls
-            if width == 4:
-                print('note: grasp_candidate_info has no rolls: restart pick_demo (old ffw_grasp)')
+                and len(info) in (n * len(cands.poses) for n in (4, 5, 6)):
+            width = len(info) // max(len(cands.poses), 1)  # 4 = before rolls, 5 = before backups
+            if width < 6:
+                print('note: grasp_candidate_info is an older format: restart pick_demo')
             for i, p in enumerate(cands.poses):
                 position, rotation = pose_parts(PoseStamped(pose=p))
-                opening, tilt, name, turn, roll = (list(info[width * i:width * i + width])
-                                                   + [0.0])[:5]
+                row = list(info[width * i:width * i + width]) + [0.0] * (6 - width)
+                opening, tilt, name, turn, roll, backup = row
+                backup = bool(backup) or bool(roll)  # older rows: rolls were the backups
                 out.append({'position': position, 'rotation': rotation, 'opening': opening,
                             'label': f'{"AB"[int(name)]} tilt {math.degrees(tilt):.0f}'
-                            + (f' roll {math.degrees(roll):+.0f}' if roll else ''),
-                            'turn': turn, 'roll': roll})
+                            + (f' roll {math.degrees(roll):+.0f}' if roll else '')
+                            + (f' open {opening * 1000:.0f}' if backup and not roll else ''),
+                            'turn': turn, 'roll': roll, 'backup': backup})
         if not out:
             position, rotation = pose_parts(poses['grasp'])
             tilt = math.degrees(math.acos(np.clip(rotation[2, 2], -1, 1)))
@@ -830,7 +856,7 @@ def main():
                            f' {limit_margin(chain, arm_joints, states[0]):.3f}) + analytic IK line,'
                            f' joint motion {motion:.2f} rad')
                     lifted = own_trajectory(states[g:]) if len(states) > g + 1 else None
-                    return ([traj], how, states[g], lifted, motion), '', ompl
+                    return ([traj], how, states[g], lifted, motion, joints), '', ompl
                 ompl = ompl or (target, states, g)
                 why = f'joint path to {target} collides {text}'
                 if time.time() > deadline:
@@ -854,26 +880,26 @@ def main():
             return None, why
         lifted = own_trajectory(states[g:]) if len(states) > g + 1 else None
         return ([traj, line], f'OMPL to {target} (stops there) + analytic IK line', states[g],
-                lifted, math.inf), ''
+                lifted, math.inf, traj_states(traj, now)), ''
 
     def search_approach(options, now, lift=0.0):
         """(option, rotation, segments, how, grasp values, lift trajectory) or None. Options x
         gripper yaws in order of TCP turn from the initial pose; every one within --turn-window
         of the least turn is solved and the least joint motion of those that pass wins (user
         2026-11-02); past the window the first that passes. Within one, the least joint motion
-        (try_approach). Rolled options only when no upright one passes: first that passes, in
-        ffw_grasp's order (2026-11-03). OMPL only after every one failed so."""
+        (try_approach). Backups (narrow openings, rolls) only when no normal one passes: first
+        that passes, in ffw_grasp's order (2026-11-03). OMPL only after every one failed so."""
         deadline = time.time() + args.budget
-        upright, rolled = search_tiers(options, home_rot)
+        normal, backups = search_tiers(options, home_rot)
         retry, best = [], None
-        for tier, entries in (('upright', upright), ('rolled', rolled)):
+        for tier, entries in (('normal', normal), ('backup', backups)):
             if best is not None or time.time() > deadline:
                 break
-            if tier == 'rolled' and entries:
-                log.append(f'rolled backups: {len(entries) // 2} options')
+            if tier == 'backup' and entries:
+                log.append(f'backups: {len(entries) // 2} options')
             window = entries[0][0] + math.radians(args.turn_window) if entries else 0.0
             for turn, oi, flip in entries:
-                if best is not None and (tier == 'rolled' or turn > window):
+                if best is not None and (tier == 'backup' or turn > window):
                     break
                 if time.time() > deadline:
                     log.append(f'search budget {args.budget:.0f} s used up')
@@ -890,7 +916,7 @@ def main():
                 if ompl is not None:
                     retry.append((name, o, rotation, ompl))
         if best is not None:
-            return (best[0], best[1]) + best[2][:4]
+            return (best[0], best[1]) + best[2][:4] + best[2][5:6]
         if time.time() > deadline:
             return None
         for name, o, rotation, ompl in retry:
@@ -900,7 +926,7 @@ def main():
             found, why = approach_ompl(o, rotation, now, ompl)
             log.append(f'{name} OMPL: ' + (f'OK - {found[1]}' if found else why))
             if found:
-                return (o, rotation) + found[:4]
+                return (o, rotation) + found[:4] + found[5:6]
         return None
 
     log = []
@@ -982,7 +1008,7 @@ def main():
         if found is None:
             print('NO SOLUTION: every option above failed; the arm is not moved')
             return 1
-        option, rotation, approach, how, grasp_values, lift = found
+        option, rotation, approach, how, grasp_values, lift, outbound = found
         print(f'chosen: {option["label"]} - {how}')
         lift_end = option['position'] + np.array([0.0, 0.0, args.lift])
         lift_how = 'analytic IK line'
@@ -1069,7 +1095,20 @@ def main():
                 if up is not None:
                     ask(f'up {args.home_lift * 100:.0f} cm ({up_how})?')
                     run_trajectory(up, 'up before HOME')
-            home_segments = plan_home(current())
+            for extra in range(HOME_EXTRA_LIFTS + 1):
+                try:
+                    home_segments = plan_home(current(), outbound)
+                    break
+                except RuntimeError as error:
+                    if extra == HOME_EXTRA_LIFTS or args.home_lift <= 0:
+                        raise
+                    print(f'  note: {error}')
+                    here = current()
+                    pose = chain.fk(here)
+                    higher = pose[:3, 3] + np.array([0.0, 0.0, args.home_lift])
+                    up, up_how = plan_line(here, higher, pose[:3, :3], 'more up before HOME')
+                    ask(f'up {args.home_lift * 100:.0f} cm more ({up_how})?')
+                    run_trajectory(up, 'more up before HOME')
             for i, seg in enumerate(home_segments, 1):
                 ask(f'home {i}/{len(home_segments)}?')
                 run_trajectory(seg, f'back to HOME {i}/{len(home_segments)}')

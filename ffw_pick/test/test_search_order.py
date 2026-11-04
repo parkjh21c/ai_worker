@@ -12,18 +12,18 @@ def yaw(deg):
 
 class TestSearchTiers(unittest.TestCase):
 
-    def test_upright_by_turn_then_rolled_in_given_order(self):
-        options = [{'rotation': yaw(40), 'roll': 0.0}, {'rotation': yaw(10), 'roll': 0.0},
-                   {'rotation': yaw(5), 'roll': -0.2}, {'rotation': yaw(60), 'roll': 0.2}]
+    def test_normal_by_turn_then_backups_in_given_order(self):
+        options = [{'rotation': yaw(40), 'backup': False}, {'rotation': yaw(10), 'backup': False},
+                   {'rotation': yaw(5), 'backup': True}, {'rotation': yaw(60), 'backup': True}]
         upright, rolled = search_tiers(options, np.eye(3))
         turns = [e[0] for e in upright]
         self.assertEqual({e[1] for e in upright}, {0, 1})
         self.assertEqual(turns, sorted(turns))
         self.assertEqual([e[1] for e in upright][0], 1)
-        # rolled keep ffw_grasp's order, both yaws each
+        # backups keep ffw_grasp's order, both yaws each
         self.assertEqual([(e[1], e[2]) for e in rolled], [(2, False), (2, True), (3, False),
                                                           (3, True)])
-        # old ffw_grasp rows without 'roll' are upright
+        # rows without the flag are normal
         self.assertEqual(len(search_tiers([{'rotation': yaw(0)}], np.eye(3))[0]), 2)
 
 
