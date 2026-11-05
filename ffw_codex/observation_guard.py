@@ -261,7 +261,17 @@ class ObservationGuard:
         if name not in ACTION_TOOLS:
             result = self.tools.dispatch(name, args)
             if name == 'observe' and result.get('status') == 'ok':
-                self._register(result['data'], result['images'])
+                try:
+                    self._register(result['data'], result['images'])
+                except Exception as exc:
+                    # Nothing moved; the caller may observe again.
+                    return {
+                        'status': 'rejected',
+                        'reason': f'observation rejected: {exc}',
+                        'command_sent': False,
+                        'data': {'action_context': self._context()},
+                        'images': [],
+                    }
             return result
 
         if self._halted:
@@ -325,7 +335,13 @@ class ObservationGuard:
                 self._invalidate()
                 snapshot = result['data'].get('post_observation')
                 if snapshot is not None and not result['data'].get('post_observation_error'):
-                    self._register(snapshot, result['images'])
+                    try:
+                        self._register(snapshot, result['images'])
+                    except Exception as exc:
+                        # The action ran and came to rest; only its observation is unusable.
+                        result['data']['post_observation_error'] = (
+                            f'observation rejected: {exc}'
+                        )
             else:
                 # A timeout does not confirm the command stopped.
                 self._halted = True

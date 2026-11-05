@@ -46,6 +46,20 @@ def _finite_float(args, key):
     return value, None
 
 
+def _not_sent(reason, data):
+    """Result for a failure before any command was published.
+
+    Nothing moved, so the run continues after a new observation.
+    """
+    return {
+        'status': 'rejected',
+        'reason': reason,
+        'command_sent': False,
+        'data': {**data, 'invalidate_observation': True},
+        'images': [],
+    }
+
+
 def _arrival_status(arrival):
     """Return arrived, stopped or timeout from the arrival result."""
     if arrival['arrived']:
@@ -415,44 +429,26 @@ class RobotTools:
         try:
             current_pose = self.io.get_ee_pose(arm)
         except Exception as exc:
-            return {
-                'status': 'error',
-                'reason': (
-                    f'failed to read current pose: '
-                    f'{type(exc).__name__}: {exc}'
-                ),
-                'command_sent': False,
-                'data': {'requested': args},
-                'images': [],
-            }
+            return _not_sent(
+                f'failed to read current pose: {type(exc).__name__}: {exc}',
+                {'requested': args},
+            )
 
         try:
             arm_base = self.io.get_arm_base_z()
         except Exception as exc:
-            return {
-                'status': 'error',
-                'reason': (
-                    f'failed to read arm base height: '
-                    f'{type(exc).__name__}: {exc}'
-                ),
-                'command_sent': False,
-                'data': {'requested': args},
-                'images': [],
-            }
+            return _not_sent(
+                f'failed to read arm base height: {type(exc).__name__}: {exc}',
+                {'requested': args},
+            )
 
         try:
             ok, reason, target = validate_move(args, self.cfg, current_pose, arm_base['z'])
         except Exception as exc:
-            return {
-                'status': 'error',
-                'reason': (
-                    f'move validation failed: '
-                    f'{type(exc).__name__}: {exc}'
-                ),
-                'command_sent': False,
-                'data': {'requested': args},
-                'images': [],
-            }
+            return _not_sent(
+                f'move validation failed: {type(exc).__name__}: {exc}',
+                {'requested': args},
+            )
 
         if not ok:
             return {
@@ -469,19 +465,11 @@ class RobotTools:
         try:
             sent = self.io.send_pose(arm, target)
         except Exception as exc:
-            return {
-                'status': 'error',
-                'reason': (
-                    f'failed to publish move command: '
-                    f'{type(exc).__name__}: {exc}'
-                ),
-                'command_sent': False,
-                'data': {
-                    'target': target,
-                    'current_pose': current_pose,
-                },
-                'images': [],
-            }
+            # send_pose raises before publishing, e.g. when Cyclo is not subscribed.
+            return _not_sent(
+                f'failed to publish move command: {type(exc).__name__}: {exc}',
+                {'requested': args, 'target': target, 'current_pose': current_pose},
+            )
 
         try:
             arrival = self.io.wait_until_arrived(arm, target, sent['quat'])
@@ -568,16 +556,10 @@ class RobotTools:
                 clean['value'],
             )
         except Exception as exc:
-            return {
-                'status': 'error',
-                'reason': (
-                    f'failed to publish gripper command: '
-                    f'{type(exc).__name__}: {exc}'
-                ),
-                'command_sent': False,
-                'data': {'target': clean},
-                'images': [],
-            }
+            return _not_sent(
+                f'failed to publish gripper command: {type(exc).__name__}: {exc}',
+                {'requested': args, 'target': clean},
+            )
 
         try:
             arrival = self.io.wait_until_gripper_arrived(
@@ -688,16 +670,10 @@ class RobotTools:
             self.io.get_body_state(group=group)
             sent_at = self.io.send_body(group, targets)
         except Exception as exc:
-            return {
-                'status': 'error',
-                'reason': (
-                    f'failed before sending {group} command: '
-                    f'{type(exc).__name__}: {exc}'
-                ),
-                'command_sent': False,
-                'data': {'target': targets},
-                'images': [],
-            }
+            return _not_sent(
+                f'failed before sending {group} command: {type(exc).__name__}: {exc}',
+                {'requested': requested, 'target': targets},
+            )
 
         try:
             arrival = self.io.wait_until_body_arrived(

@@ -133,6 +133,7 @@ points along -z; +z points back toward the wrist.
 - If post-observation fails, the response has `observation: null` and status `arrived_without_observation` or `stopped_without_observation`. Call `robot_observe` before another action.
 - Submit the action target, `reason` (observed evidence and purpose), and latest `request_id` together. The response packet's `reason` describes the execution result. Robot tools run one at a time.
 - When an action is rejected for its arguments (`invalid_action`), nothing moved and the previous observation stays current. The packet has a new `request_id` for the corrected action.
+- When an action is rejected with `not_ready`, nothing moved, but the robot could not accept the command, for example a measurement or the controller connection was unavailable. The observation is no longer valid; call `robot_observe` and try again.
 - An observation expires after `action_context.max_age_s` seconds (60). It is also rejected if the robot's state has changed since, for example a gripper holding an object that kept closing. Either way `movement_allowed` becomes false and you must call `robot_observe`.
 - `next_call` in each packet names the tool to call next.
 
