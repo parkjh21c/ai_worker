@@ -44,7 +44,7 @@ def generate_launch_description():
         DeclareLaunchArgument('gui', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('rviz', default_value='true', choices=['true', 'false']),
         DeclareLaunchArgument('use_cam', default_value='false',
-                              description='Gz cameras (head, wrists)'),    
+                              description='Gz cameras (head, wrists)'),
     ]
 
     model = LaunchConfiguration('model')
@@ -94,7 +94,7 @@ def generate_launch_description():
         ' ',
         'use_sim:=true',
         ' ',
-        'use_cam:=true',
+        'use_cam:=', use_cam,
     ])
 
     robot_description = {'robot_description': robot_description_content}
@@ -159,7 +159,7 @@ def generate_launch_description():
         'common',
         'gz_bridge.yaml'
     )
-    
+
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
