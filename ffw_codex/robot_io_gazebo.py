@@ -16,8 +16,10 @@
 #
 # Author: Jiho Park
 
+from bisect import bisect_left
 from collections import deque
 import math
+from operator import itemgetter
 import threading
 import time
 
@@ -49,6 +51,7 @@ BASE_LIMITS = (
     'rest_yaw_rad', 'rest_speed_mps', 'rest_speed_rps', 'rest_timeout_s',
 )
 ZERO_REPEATS = 2
+_stamp = itemgetter('stamp_s')
 
 
 def stamp_seconds(stamp):
@@ -110,6 +113,10 @@ class RobotIO(Node):
             'head_joint2': 'rad',
             'lift_joint': 'm',
         }
+        # Cache only the joints read back; /joint_states also carries every arm joint.
+        self._tracked_joints = (
+            frozenset(cfg['cyclo']['gripper_joint'].values()) | frozenset(self.body_units)
+        )
 
         limit_keys = {
             'head_joint1': 'head_joint1_rad',
@@ -194,8 +201,11 @@ class RobotIO(Node):
     def _on_joint_state(self, msg):
         received = time.monotonic()
         stamp_s = stamp_seconds(msg.header.stamp)
+        tracked = self._tracked_joints
         with self._cache_lock:
             for name, position in zip(msg.name, msg.position):
+                if name not in tracked:
+                    continue
                 history = self._joint_cache.get(name)
                 if history is None:
                     history = self._joint_cache[name] = deque(maxlen=self._joint_history)
@@ -324,6 +334,11 @@ class RobotIO(Node):
                 f'joint {joint}'
                 for joint in required_joints
                 if not self._joint_cache.get(joint)
+            ]
+            missing += [
+                f'camera {camera}: {topic} (launch with use_cam:=true)'
+                for camera, topic in self.cameras.items()
+                if not self._image_cache.get(camera)
             ]
             if self._sim_clock is None:
                 missing.append('/clock')
@@ -538,8 +553,13 @@ class RobotIO(Node):
 
     @staticmethod
     def _nearest(history, stamp_s):
-        """Entry of history whose stamp is closest to stamp_s, or None if empty."""
-        return min(history, key=lambda entry: abs(entry['stamp_s'] - stamp_s), default=None)
+        """Entry of a stamp-sorted history closest to stamp_s, or None if empty."""
+        index = bisect_left(history, stamp_s, key=_stamp)
+        return min(
+            history[max(0, index - 1):index + 1],
+            key=lambda entry: abs(entry['stamp_s'] - stamp_s),
+            default=None,
+        )
 
     def _state_at(self, stamp_s, joints):
         """Match arm state at a simulation timestamp
@@ -597,7 +617,14 @@ class RobotIO(Node):
         if waiting:
             return f'no frame yet from {", ".join(waiting)}', None, None, None
 
-        # TF may lag camera frames; require matching state before returning.
+        # Sort once outside the lock so each lookup can bisect.
+        for histories in (frames, joints, body_histories):
+            for key, history in histories.items():
+                histories[key] = sorted(history, key=_stamp)
+        odom_history.sort(key=_stamp)
+
+        # Walk newest first: TF may lag the cameras, so the newest time with every
+        # camera frame may not have its state yet while an older one does.
         newest_problem = None
         for stamp_s in sorted({f['stamp_s'] for f in frames[cameras[0]]}, reverse=True):
             if after_stamp_s is not None and stamp_s <= after_stamp_s:
@@ -630,6 +657,7 @@ class RobotIO(Node):
                 if newest_problem is None:
                     newest_problem = problem
 
+        if newest_problem is not None:
             return newest_problem, None, None, None
         after = '' if after_stamp_s is None else f' newer than {after_stamp_s:.3f}'
         return f'no time{after} with a frame from every camera', None, None, None

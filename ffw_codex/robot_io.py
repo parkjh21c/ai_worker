@@ -16,8 +16,10 @@
 #
 # Author: Jiho Park
 
+from bisect import bisect_left
 from collections import deque
 import math
+from operator import itemgetter
 import threading
 import time
 
@@ -49,6 +51,7 @@ BASE_LIMITS = (
     'rest_yaw_rad', 'rest_speed_mps', 'rest_speed_rps', 'rest_timeout_s',
 )
 ZERO_REPEATS = 2
+_stamp = itemgetter('stamp_s')
 
 
 def stamp_seconds(stamp):
@@ -112,6 +115,10 @@ class RobotIO(Node):
             'head_joint2': 'rad',
             'lift_joint': 'm',
         }
+        # Cache only the joints read back; /joint_states also carries every arm joint.
+        self._tracked_joints = (
+            frozenset(cfg['cyclo']['gripper_joint'].values()) | frozenset(self.body_units)
+        )
 
         limit_keys = {
             'head_joint1': 'head_joint1_rad',
@@ -196,8 +203,11 @@ class RobotIO(Node):
     def _on_joint_state(self, msg):
         received = time.monotonic()
         stamp_s = stamp_seconds(msg.header.stamp)
+        tracked = self._tracked_joints
         with self._cache_lock:
             for name, position in zip(msg.name, msg.position):
+                if name not in tracked:
+                    continue
                 history = self._joint_cache.get(name)
                 if history is None:
                     history = self._joint_cache[name] = deque(maxlen=self._joint_history)
@@ -548,8 +558,13 @@ class RobotIO(Node):
 
     @staticmethod
     def _nearest(history, stamp_s):
-        """Entry of history whose stamp is closest to stamp_s, or None if empty."""
-        return min(history, key=lambda entry: abs(entry['stamp_s'] - stamp_s), default=None)
+        """Entry of a stamp-sorted history closest to stamp_s, or None if empty."""
+        index = bisect_left(history, stamp_s, key=_stamp)
+        return min(
+            history[max(0, index - 1):index + 1],
+            key=lambda entry: abs(entry['stamp_s'] - stamp_s),
+            default=None,
+        )
 
     def _state_at(self, stamp_s, joints):
         """Returns (problem, arms). problem is None when every value was found."""
@@ -613,6 +628,12 @@ class RobotIO(Node):
         if waiting:
             return f'no frame yet from {waiting}', None, None, None
 
+        # Sort once outside the lock so each lookup can bisect.
+        for histories in (frames, joints, body_histories):
+            for key, history in histories.items():
+                histories[key] = sorted(history, key=_stamp)
+        odom_history.sort(key=_stamp)
+
         problem = 'no compatible camera/state timestamps'
 
         candidates = sorted(
@@ -622,7 +643,7 @@ class RobotIO(Node):
 
         for stamp_s in candidates:
             if after_stamp_s is not None and stamp_s <= after_stamp_s:
-                continue
+                break  # candidates are newest first
 
             chosen = {}
 
@@ -694,18 +715,14 @@ class RobotIO(Node):
         body = state['body']
         base = state['base']
 
-        # Encode matched frames outside the cache lock.
-        now = time.monotonic()
+        # Encode matched frames outside the cache lock; measure age after encoding.
         images = {
-            camera: self._encode_frame(camera, frame, now)
+            camera: self._encode_frame(camera, frame)
             for camera, frame in frames.items()
         }
-
         encoded_at = time.monotonic()
         for camera, frame in frames.items():
-            images[camera]['receive_age_s'] = (
-                encoded_at - frame['received']
-            )
+            images[camera]['receive_age_s'] = encoded_at - frame['received']
 
         offsets = [
             abs(image['stamp_s'] - stamp_s)
@@ -732,7 +749,7 @@ class RobotIO(Node):
             'clock': self.get_runtime_clock(),
         }
 
-    def _encode_frame(self, camera, frame, now):
+    def _encode_frame(self, camera, frame):
         msg = frame['msg']
         image = self._bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         ok, buffer = cv2.imencode('.jpg', image, [cv2.IMWRITE_JPEG_QUALITY, self.jpeg_quality])
@@ -744,7 +761,7 @@ class RobotIO(Node):
             'topic': self.cameras[camera],
             'frame_id': msg.header.frame_id,
             'stamp_s': frame['stamp_s'],
-            'receive_age_s': now - frame['received'],
+            'receive_age_s': None,  # set by get_snapshot after encoding
             'width': msg.width,
             'height': msg.height,
             'encoding': msg.encoding,
