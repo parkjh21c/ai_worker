@@ -43,6 +43,6 @@ def generate_launch_description():
             package='ffw_vision', executable='web_select', name='web_select',
             namespace=namespace, output='screen',
             parameters=[params_file, overrides, {
-                'display_topic': 'debug_image',
+                'display_topic': 'debug_image', 'info_topic': 'debug_info',
                 'port': ParameterValue(LaunchConfiguration('port'), value_type=int)}]),
     ])

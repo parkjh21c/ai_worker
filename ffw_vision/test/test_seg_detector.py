@@ -103,6 +103,7 @@ class TestDetectSeg(unittest.TestCase):
 
     def test_lying_box_straight_down(self):
         scene = Scene(box=(0.0, 0.0, 0.046, 0.034, 30, 0.034))
+        scene.color = cv2.GaussianBlur(scene.color, (3, 3), 0)  # lens blur, no staircases
         (obj,), (n, d) = self.run_scene(scene)
         self.assertAlmostEqual(d, 0.30, places=3)
         self.assertAlmostEqual(obj.plane_height, 0.034, delta=0.002)
@@ -183,6 +184,53 @@ class TestDetectSeg(unittest.TestCase):
                 expected = normalize_angle(math.atan2(tv - cv, tu - cu))
                 self.assertAlmostEqual(normalize_angle(obj.angle - expected), 0.0,
                                        delta=math.radians(3))
+
+    def test_blue_lines_under_a_bled_mask_do_not_vote(self):
+        scene = Scene(box=(0.0, 0.0, 0.046, 0.034, 25, 0.034))
+        bled = grow(scene.box_mask, 9)  # the model mask runs onto the basket wall
+        ys, xs = np.nonzero(bled)
+        shadow = (100, 50, 0)  # dark blue, still basket blue
+        scene.color[ys.min():ys.max() + 1, xs.min() + 1:xs.min() + 5] = shadow  # wall line, 0 deg
+        scene.color[ys.max() - 4:ys.max(), xs.min():xs.max() + 1] = shadow  # shadow line, 90 deg
+        scene.color[scene.box_mask] = DARK
+        scene.color = cv2.GaussianBlur(scene.color, (3, 3), 0)
+        (cu, cv), (tu, tv) = project([scene.center, scene.center + 0.02 * scene.axis], K, scene.d)
+        expected = normalize_angle(math.atan2(tv - cv, tu - cu))
+        (obj,), _ = self.run_scene(scene, [(bled, 0.9)])
+        self.assertAlmostEqual(normalize_angle(obj.angle - expected), 0.0, delta=math.radians(3))
+        (old,), _ = self.run_scene(scene, [(bled, 0.9)], replace(PARAMS, edge_skip_blue=False))
+        old_error = abs(normalize_angle(old.angle - expected, math.pi / 2))
+        self.assertGreater(old_error, math.radians(5))
+
+    def test_drawn_face_has_the_known_size(self):
+        scene = Scene(box=(0.0, 0.0, 0.046, 0.034, 30, 0.030))  # lowest side down: top 30 mm
+        params = replace(PARAMS, face_long=0.0465, face_mid=0.034, face_short=0.0285)
+        (obj,), _ = self.run_scene(scene, params=params)
+        corners = obj.face_corners.reshape(4, 2).astype(float)
+        # sides of the drawn quad = the known 46.5 x 34 face seen at its height
+        across = np.cross(scene.n, scene.axis)
+        ref = project([scene.center + sa * 0.02325 * scene.axis + sb * 0.017 * across
+                       for sa, sb in ((1, 1), (1, -1), (-1, -1), (-1, 1))], K, scene.d)
+        ref_sides = sorted(np.hypot(*(ref[i] - ref[(i + 1) % 4])) for i in range(4))
+        sides = sorted(np.hypot(*(corners[i] - corners[(i + 1) % 4])) for i in range(4))
+        np.testing.assert_allclose(sides, ref_sides, atol=2.0)
+        (plain,), _ = self.run_scene(scene)  # no known size: the measured one is drawn
+        self.assertIsNotNone(plain.face_corners)
+
+    def test_debug_votes_leave_result_unchanged(self):
+        scene = Scene(tilt_deg=30, box=(0.0, 0.0, 0.046, 0.034, 37, 0.034))
+        scene.color = cv2.GaussianBlur(scene.color, (3, 3), 0)
+        segments = [(grow(scene.box_mask, 1), 0.9)]
+        plain, _ = detect_seg(scene.color, scene.depth, K, scene.d, segments, PARAMS)
+        debug = []
+        (obj,), _ = detect_seg(scene.color, scene.depth, K, scene.d, segments, PARAMS, None, debug)
+        self.assertEqual((obj.u, obj.v, obj.angle, obj.length_m), (plain[0].u, plain[0].v,
+                         plain[0].angle, plain[0].length_m))
+        (info,) = debug
+        self.assertEqual(len(info['edge_deg']), len(info['edge_u']))
+        self.assertTrue(info['top'].any())
+        self.assertIn('rect_deg', info)
+        self.assertIn('peak_deg', info)
 
     def test_no_color_edges_falls_back_to_min_area_rect(self):
         scene = Scene(box=(0.0, 0.0, 0.046, 0.034, 30, 0.034))

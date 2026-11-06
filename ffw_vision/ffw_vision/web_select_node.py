@@ -18,6 +18,7 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.signals import SignalHandlerOptions
 from sensor_msgs.msg import Image
+from std_msgs.msg import String
 
 SERVICE_TIMEOUT_SEC = 2.0
 SPIN_TIMEOUT_SEC = 0.1
@@ -34,6 +35,7 @@ class WebSelectNode(Node):
         self.declare_parameter('jpeg_quality', 80)
         self.declare_parameter('retention_sec', 120.0)
         self.declare_parameter('display_topic', '')  # same stamps as image_topic, e.g. debug_image
+        self.declare_parameter('info_topic', '')  # std_msgs/String shown next to the image
         self.config = load_camera_config(self)
         self.jpeg_quality = self.get_parameter('jpeg_quality').value
         self.registry = FrameRegistry(int(self.get_parameter('retention_sec').value * NS_PER_SEC))
@@ -46,6 +48,10 @@ class WebSelectNode(Node):
         self.client = self.create_client(SelectPixel, 'select_pixel')
         display_topic = self.get_parameter('display_topic').value or self.config.image_topic
         self.create_subscription(Image, display_topic, self.on_image, qos_profile_sensor_data)
+        self.info_text = None
+        if self.get_parameter('info_topic').value:
+            self.create_subscription(String, self.get_parameter('info_topic').value,
+                                     self.on_info, 10)
         address =(self.get_parameter('bind_address').value, self.get_parameter('port').value)
         self.server = ThreadingHTTPServer(address, make_handler(self))
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -58,6 +64,10 @@ class WebSelectNode(Node):
         with self.lock:
             self.registry.add(info)
             self.latest = (info, image)
+
+    def on_info(self, msg):
+        with self.lock:
+            self.info_text = msg.data
 
     def latest_jpeg(self):
         with self.lock:
@@ -150,6 +160,13 @@ def make_handler(node):
                     'X-Stamp-Sec': info.sec, 'X-Stamp-Nanosec': info.nanosec,
                     'X-Frame-Id': info.frame_id, 'X-Width': info.width,
                     'X-Height': info.height, 'X-Camera-Id': node.config.camera_id})
+            elif self.path.startswith('/info'):
+                with node.lock:
+                    text = node.info_text
+                if text is None:
+                    self.send_json(404, {'error': 'no info topic or no message yet'})
+                else:
+                    self.send(200, text.encode('utf-8'), 'text/plain; charset=utf-8')
             else:
                 self.send_json(404, {'error': 'not found'})
 

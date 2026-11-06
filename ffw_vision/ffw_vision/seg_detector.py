@@ -36,6 +36,10 @@ class SegParams:
     angle_method: str = 'edges'  # 'edges' = color edge directions, 'min_area_rect' = top points
     edge_min_px: int = 30  # fewer strong edge pixels -> min_area_rect
     edge_min_share: float = 0.15  # weight within 5 deg of the peak (even 0.12); less -> rect
+    edge_skip_blue: bool = True  # edges only from non-blue mask pixels +1 px (bled onto walls)
+    face_long: float = 0.0  # m, known box sides for the drawn top face (0: draw the measured size)
+    face_mid: float = 0.0
+    face_short: float = 0.0
     min_depth: float = 0.07
     max_depth: float = 1.0
 
@@ -54,8 +58,10 @@ class SegObject:
     plane_height: float  # top face above the support plane, m
     length_m: float
     width_m: float
-    outline: np.ndarray  # mask contour, for drawing
-    angle_source: str = ''  # 'edges' or 'min_area_rect'
+    outline: np.ndarray  # mask contour (OBB/hybrid: the box), for drawing
+    angle_source: str = ''  # 'edges', 'min_area_rect', 'obb', 'obb+edges', 'hybrid:...'
+    mask_outline: np.ndarray = None  # hybrid: the seg mask contour, for drawing
+    face_corners: np.ndarray = None  # drawn top face: 4 image corners (known size, 3D projected)
 
 
 def basket_masks(color_bgr, params):
@@ -112,6 +118,28 @@ def plane_axes(n):
     return a, np.cross(n, a)
 
 
+def known_face(top_level, params):
+    """(long, short) of the known top face for the top height: lowest side down -> long x mid,
+    mid side down -> long x short, standing -> mid x short; None without face_long."""
+    if params.face_long <= 0:
+        return None
+    if top_level >= params.standing_min_height:
+        return params.face_mid, params.face_short
+    if top_level < (params.face_short + params.face_mid) / 2:
+        return params.face_long, params.face_mid
+    return params.face_long, params.face_short
+
+
+def face_corners(center, axis, n, top_level, length_m, width_m, k, d, params):
+    """Image corners of the top face for drawing: the known face for the top height, else the
+    given (measured) size."""
+    length_m, width_m = known_face(top_level, params) or (length_m, width_m)
+    across = np.cross(n, axis)
+    pts = [center + sa * length_m / 2 * axis + sb * width_m / 2 * across
+           for sa, sb in ((1, 1), (1, -1), (-1, -1), (-1, 1))]
+    return np.round(project(pts, k, d)).astype(np.int32).reshape(-1, 1, 2)
+
+
 def project(points, k, d):
     camera = np.array(k, np.float64).reshape(3, 3)
     pixels, _ = cv2.projectPoints(np.asarray(points, np.float64).reshape(-1, 1, 3),
@@ -133,11 +161,12 @@ def merge_duplicates(segments, params):
     return kept
 
 
-def edge_angle(gray, region, rays, n, plane_d, level, params):
+def edge_angle(gray, region, rays, n, plane_d, level, params, debug=None):
     """Box direction (rad, mod pi/2, plane_axes frame) from color edges in region, or None.
 
     Every horizontal box edge (top rim, side bottoms, straight markings) is parallel to a box
     axis; edge directions are mapped onto the plane at level and the strongest one wins.
+    debug: dict filled with the votes (tools/angle_debug.py).
     """
     ys, xs = np.nonzero(region)
     if len(ys) == 0:
@@ -160,16 +189,22 @@ def edge_angle(gray, region, rays, n, plane_d, level, params):
     a, b = plane_axes(n)
     deg = np.degrees(np.arctan2(edge @ b, edge @ a)) % 90.0
     hist, _ = np.histogram(deg, bins=90, range=(0, 90), weights=m)
+    if debug is not None:
+        sy, sx = np.nonzero(sel)
+        debug.update(edge_v=sy + y0, edge_u=sx + x0, edge_deg=deg, edge_w=m,
+                     edge_img=np.column_stack((-gy[sel], gx[sel])) / m[:, None])
     kernel = np.exp(-0.5 * (np.arange(-9, 10) / 3.0) ** 2)
     smooth = np.convolve(np.concatenate((hist[-9:], hist, hist[:9])), kernel, 'same')[9:-9]
     peak = int(np.argmax(smooth))
     near = hist[[(peak + i) % 90 for i in range(-5, 6)]].sum()
+    if debug is not None:
+        debug.update(peak_deg=peak + 0.5, share=float(near / hist.sum()))
     if near < params.edge_min_share * hist.sum():
         return None
     return math.radians(peak + 0.5)
 
 
-def measure(points, heights, mask, n, k, d, params, edges=None):
+def measure(points, heights, mask, n, k, d, params, edges=None, debug=None):
     """Top face of one mask: (top level, center, long axis, length, width, angle source) or None.
 
     edges = (blurred gray, edge region, rays, plane d) for angle_method 'edges'.
@@ -186,8 +221,11 @@ def measure(points, heights, mask, n, k, d, params, edges=None):
     rad = None
     if edges is not None and params.angle_method == 'edges':
         gray, region, rays, plane_d = edges
-        rad = edge_angle(gray, region, rays, n, plane_d, top_level, params)
+        rad = edge_angle(gray, region, rays, n, plane_d, top_level, params, debug)
     source = 'edges' if rad is not None else 'min_area_rect'
+    if debug is not None:
+        debug.update(top=top, top_level=top_level,
+                     rect_deg=cv2.minAreaRect(flat)[2] % 90.0)
     if rad is None:
         rad = math.radians(cv2.minAreaRect(flat)[2])  # orientation only; extents from percentiles
     axis_a = np.array([math.cos(rad), math.sin(rad)])
@@ -204,15 +242,27 @@ def measure(points, heights, mask, n, k, d, params, edges=None):
     return top_level, center, side_b, sb, sa, source
 
 
-def detect_seg(color_bgr, depth, k, d, segments, params, rays=None):
-    """Objects from model masks + aligned depth (m, NaN invalid). Returns (objects, plane or None).
+@dataclass
+class SupportScene:
+    """Per-image geometry shared by the detectors (camera optical frame)."""
 
-    segments: [(bool mask, score)] in source pixels. Geometry is in the camera optical frame.
-    """
+    blue: np.ndarray  # basket-blue pixels
+    inner: np.ndarray  # basket area without its rim
+    valid: np.ndarray  # usable depth
+    points: np.ndarray  # (h, w, 3) camera-frame points
+    heights: np.ndarray  # above the support plane, m
+    n: np.ndarray  # support plane normal, toward the camera
+    plane_d: float
+    gray: np.ndarray  # blurred gray, float32, for color edges
+    rays: np.ndarray
+
+
+def support_scene(color_bgr, depth, k, d, params, rays=None):
+    """Basket, support plane (table ring around the basket) and heights; None without them."""
     height_px, width_px = color_bgr.shape[:2]
     basket, blue = basket_masks(color_bgr, params)
     if basket is None:
-        return [], None
+        return None
     if rays is None:
         rays = pixel_rays(width_px, height_px, k, d)
     with np.errstate(invalid='ignore'):
@@ -223,13 +273,27 @@ def detect_seg(color_bgr, depth, k, d, segments, params, rays=None):
     ring = ((cv2.dilate(basket, np.ones((params.ring_outer_px,) * 2, np.uint8)) > 0)
             & (cv2.dilate(basket, np.ones((params.ring_gap_px,) * 2, np.uint8)) == 0) & valid)
     if ring.sum() < params.min_plane_points:
-        return [], None
+        return None
     n, plane_d = fit_plane(points[ring], params, np.random.default_rng(0))
-    heights = points @ n + plane_d
     inner = cv2.erode(basket, np.ones((params.inner_erode_px,) * 2, np.uint8)).astype(bool)
-    erode = np.ones((params.mask_erode_px,) * 2, np.uint8)
     gray = cv2.GaussianBlur(cv2.cvtColor(color_bgr, cv2.COLOR_BGR2GRAY), (3, 3), 0)
-    gray = gray.astype(np.float32)
+    return SupportScene(blue, inner, valid, points, points @ n + plane_d, n, plane_d,
+                 gray.astype(np.float32), rays)
+
+
+def detect_seg(color_bgr, depth, k, d, segments, params, rays=None, debug=None, scene=None):
+    """Objects from model masks + aligned depth (m, NaN invalid). Returns (objects, plane or None).
+
+    segments: [(bool mask, score)] in source pixels. Geometry is in the camera optical frame.
+    debug: list that gets one dict per returned object (tools/angle_debug.py, hybrid_detector).
+    scene: support_scene of this image when the caller has it already.
+    """
+    scene = scene or support_scene(color_bgr, depth, k, d, params, rays)
+    if scene is None:
+        return [], None
+    blue, inner, valid, points = scene.blue, scene.inner, scene.valid, scene.points
+    heights, n, plane_d, gray, rays = scene.heights, scene.n, scene.plane_d, scene.gray, scene.rays
+    erode = np.ones((params.mask_erode_px,) * 2, np.uint8)
 
     objects = []
     segments = [(mask, score) for mask, score in segments if score >= params.conf]
@@ -238,12 +302,19 @@ def detect_seg(color_bgr, depth, k, d, segments, params, rays=None):
         core = cv2.erode(mask.astype(np.uint8), erode).astype(bool) & inner & valid & ~blue
         if core.sum() < params.min_mask_px:
             continue
-        # edges: the whole mask (+1 px, top rim and side faces) inside the basket
-        region = cv2.dilate(mask.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool) & inner
-        top = measure(points, heights, core, n, k, d, params, (gray, region, rays, plane_d))
+        # edges: the mask (+1 px, top rim and side faces) inside the basket; without the blue
+        # part the wall and shadow lines under a bled mask do not vote
+        voters = mask & ~blue if params.edge_skip_blue else mask
+        region = cv2.dilate(voters.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool)
+        region &= inner
+        info = None if debug is None else {'mask': mask, 'region': region}
+        top = measure(points, heights, core, n, k, d, params, (gray, region, rays, plane_d), info)
         if top is None:
             continue
         top_level, center, axis, length_m, width_m, angle_source = top
+        if debug is not None:
+            info['axis'] = axis
+            debug.append(info)
         half_long, half_short = axis * length_m / 2, np.cross(n, axis) * width_m / 2
         (u, v), tip, tail, side, other = project(
             [center, center + half_long, center - half_long, center + half_short,
@@ -262,7 +333,9 @@ def detect_seg(color_bgr, depth, k, d, segments, params, rays=None):
         objects.append(SegObject(
             float(u), float(v), length_px, width_px, angle, 0.0 if ambiguous else period,
             'unknown' if ambiguous else pose, ambiguous, float(score), top_level,
-            float(length_m), float(width_m), max(contours, key=cv2.contourArea), angle_source))
+            float(length_m), float(width_m), max(contours, key=cv2.contourArea), angle_source,
+            face_corners=face_corners(center, axis, n, top_level, length_m, width_m, k, d,
+                                      params)))
     return objects, (n, plane_d)
 
 

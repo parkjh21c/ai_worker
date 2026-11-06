@@ -248,10 +248,11 @@ ros2 topic echo /ffw_vision/right_wrist/object_observations --once
 처리 순서: ① 가장 큰 파란 영역 = 바구니 ② 바구니 둘레 띠(탁자)의 depth 로 RANSAC 평면 → `support_plane`
 ③ 모델 마스크(`conf` 이상)를 `mask_erode_px` 만큼 줄이고 파란 픽셀·바구니 테두리를 뺀다(마스크가 벽으로 번지는 것 방지)
 ④ 가장 높은 `top_share` % 의 중앙값 = `top_height`, 그보다 `top_tolerance` 이내 점 = 윗면 ⑤ 윗면 점을 평면 위에서 회전 사각형으로 맞춤 → 중심·긴 변을 영상으로 투영해 `u`, `v`, `length`, `width`, `angle`
-⑤ 방향(`angle_method: edges`, 기본): 마스크(+1 px) 안 컬러 경계선의 방향을 탁자 평면(윗면 높이) 위 방향으로 바꿔 90° 로 접은 히스토그램(세기 가중)의 최댓값.
+⑤ 방향(`angle_method: edges`, 기본): 마스크에서 파란 픽셀을 뺀 영역(+1 px, `edge_skip_blue`) 안 컬러 경계선의 방향을 탁자 평면(윗면 높이) 위 방향으로 바꿔 90° 로 접은 히스토그램(세기 가중)의 최댓값.
 상자의 수평 모서리(윗면 테두리, 옆면 아래 모서리, 직선 무늬)는 모두 상자 축과 평행하다. 긴 변 = 윗면 점을 그 두 축으로 쟀을 때 긴 쪽.
 경계 픽셀 < `edge_min_px` 이거나 최댓값 ±5° 에 모인 비율 < `edge_min_share` 면 윗면 점의 회전 사각형(`min_area_rect`). 로그에 ` rect` 로 표시
 (2026-10-30 녹화 75 장, 1 개 물체 41 개, 실제 YOLO 마스크: 방향 오차 중앙값 6.2° → 2.0°, 10° 넘게 틀림 15 → 3. 비율 기준을 높여 대체를 늘리면 오히려 나빠짐 → 0.15 = 거의 고르게 퍼진 경우만)
+`edge_skip_blue` (2026-11-05): 벽 쪽으로 번진 마스크 아래의 벽·그림자 직선이 표를 던져 20° 넘게 틀리던 것을 막음. 윗면 4점 정답 35 개(dump_test `_0`): 평균 오차 3.6° → 1.1°, 5° 넘게 틀림 5 → 1, 최대 26.4° → 6.4° (`tools/angle_debug.py`)
 
 | 판정 | 조건 |
 |---|---|
@@ -262,11 +263,22 @@ ros2 topic echo /ffw_vision/right_wrist/object_observations --once
 - 수신 측: `u`, `v` 의 광선과 `support_plane` 을 `top_height` 만큼 올린 면의 교점 = 윗면 중심 3D. `angle` 방향의 가까운 픽셀도 같은 방법으로 → 긴 변 방향. 크기(m)는 양 끝 투영 거리가 `length`, `width` 가 되는 값 (`ffw_grasp` 의 `top_face`).
 - 마스크를 줄이므로 윗면 크기(mm)는 실제보다 2~3 mm 작게 나온다. 중심은 영향이 거의 없다.
 - `length`, `width` 는 윗면(mm)의 긴 변·짧은 변 **양 끝을 영상에 투영한 두 점 사이 거리**다 (기울어 보면 가까운 쪽 절반이 더 길어 보여서 한쪽만 재지 않음). 기울어 보면 `length < width` 일 수 있다. `angle` 은 실제 긴 변 방향이다.
-- 화면: 회색 = 모델 마스크, 초록/주황 = 윗면, 글자 = 자세 + 높이(mm) + 점수.
+- 화면: 점 = 윗면 중심, 사각형 = 윗면(`face_long/mid/short` 가 있으면 알려진 치수, 없으면 잰 크기, 3D 투영), 초록/주황 = 집을 수 있음/애매. 자세·높이·점수는 로그.
 - task 설정: `config/dynamixel_basket_seg.yaml` (초기 자세 3차, `auto_detect.launch.py` 의 기본 `task_file`).
   바구니 색(HSV)은 `config/blue_basket.yaml`(`basket_file`) — `ffw_grasp` 의 바구니 맞추기와 같은 파일.
 - 가중치: task 파일의 `model_file`(지금 `dynamixel_seg_n640.pt`, 이 패키지의 `models/`, 설치 후 share/ffw_vision/models)과 학습 때 입력 크기 `imgsz`(640)를 같은 파일에서 정한다. 이름이 아니라 절대 경로도 된다. 시험할 때는 launch 인자 `model_path:=`(또는 환경 변수 `FFW_VISION_MODEL`)가 `model_file` 을 덮는다(`imgsz` 는 task 파일 값 그대로이니 맞는 모델만). 시작 로그 `YOLO weights …, imgsz …` 로 확인.
 - 지금 모델(2026-11-03): YOLO11n-seg, 입력 640, 학습 116 장(가지런한 배치 50 + 컵 쏟기·뒤집힘·기울어짐 66). 이전 모델(448, 50 장, 기울어진 물체를 두 마스크로 쪼갬)은 git `a325007` 의 `models/dynamixel_seg_n.pt`.
+
+### 하이브리드 `detector: yolo_hybrid` (2026-11-05, `pick_demo` 기본)
+
+설정 `config/dynamixel_basket_hybrid.yaml` (seg 설정 그대로 + 아래). 되돌리기: `pick_demo … detect_file:=<share>/config/dynamixel_basket_seg.yaml`.
+
+- **위치는 OBB, 방향·크기는 seg**: 윗면 OBB 모델(`obb_model_file: dynamixel_obb_n640.pt`, `obb_imgsz` 640)이 물체·중심·윗면 높이(상자를 `top_inner` 로 줄인 안쪽 depth 중앙값)를 정하고, 같은 물체의 seg 마스크(중심 `hybrid_match_px` 안)가 방향(경계선 투표)과 크기(윗면 점, 애매 판정도 seg 기준)를 정한다. OBB 상자는 실제보다 4~12 mm 크게 나와(라벨은 정확) 크기로 쓰지 않는다. `report_face_size: true`(하이브리드 설정)면 내보내는 크기는 높이로 고른 알려진 윗면 치수(`face_long/mid/short`) — seg 는 작게 재서 눕힘이 정사각형처럼 보이고, ffw_grasp 가 두 방향 모두 70 mm 로 벌려 벽 옆에서 막혔음. 애매(두 물체를 하나로) 판정은 OBB 상자 크기로만(`box_max_length/width` 75 × 48 mm): 물체 수는 상자가 정하고, seg 마스크는 벽 옆 그림자로 부풀 수 있음(벽에 붙은 눕힘이 59.6 mm 로 재져 애매로 빠지던 것). 어느 쪽이 긴 변인지도 방향과 함께: seg 방향을 쓰면 seg 축(크기를 잰 축), 아니면 상자의 긴 변. 같은 물체에 상자가 둘이면(중심 `box_merge_px` 8 px 안) 점수 높은 하나. seg 방향이 상자 각도와 `hybrid_window_deg`(25°) 넘게 다르면 seg 투표에서 상자 각도 ±25° 안의 가장 큰 봉우리를 쓴다(기울어진 물체에서 엉뚱한 봉우리가 이긴 경우). seg 짝이 없으면 상자 각도·크기
+- 정답 비교 (`tools/angle_debug.py --detector hybrid`, 근거 `angle_review/evidence/`): 중심 오차 중앙값 seg 4.9 mm → 1.9 mm, 방향은 seg 와 같거나 나음(dump_test 35 개 평균 1.1°, tilt_test 13 개 4.5° → 2.2°, unstable 20 프레임 × 3 에서 10° 넘게 틀림 42 → 22). OBB 각도만 쓰면 정사각형에 가까운 윗면에서 10~20° 틀림
+- 화면 8765 (2026-11-06): 영상 = 점(윗면 중심) + 사각형 + `#번호 YOLO 점수`, 영상 오른쪽 패널 = 설정(모델·conf·창 등)과 프레임 정보(탁자까지 거리·물체 수·추론 시간) + 물체 표(번호·자세·윗면 높이·잰 크기·점수·방향 출처·애매). 패널은 노드의 `debug_info`(std_msgs/String)를 `web_select` 가 `info_topic` 으로 받아 `/info` 로 보여 줌(영상 크기는 그대로라 클릭 선택 좌표 안 바뀜). 사각형 (작업 파일의 알려진 치수 `face_long/mid/short` 를 높이에 맞게 골라 탁자 평면에서 3D 투영 — 잰 크기는 OBB 는 크게·seg 는 작게 나와 그리지 않음), 초록 = 집을 수 있음 / 주황 = 애매. 방향 출처는 로그 `dir=s|o|b` (`s` seg / `o` 상자 근처 seg 봉우리 / `b` 상자 각도)
+- Orin 추론: 두 모델 약 30 + 32 ms
+- OBB 도구(`tools/`): `top_face_draft.py`(윗면 4점 초안, `--coco` = Roboflow 업로드용) → Roboflow/labelme 수정 → `roboflow_import.py` → `labelme_to_obb.py` → `train_obb.py`; 규칙 `notes/top_face_label_rules.md`
+
 - 학습 도구(`tools/`, 설치 안 함, `ultralytics` 필요):
   `labelme_draft.py`(규칙 기반 초안, `--model` 이면 지금 모델의 마스크로 초안) → labelme 로 다듬기 → `labelme_to_yolo.py`(YOLO-seg 데이터셋) → `train_seg.py`(yolo11n-seg, `--imgsz` 기본 448 — 지금 모델은 640, 150 epoch) → `eval_seg.py`(라벨과 비교).
   `extract_frames.py`: 녹화(bag)에서 컬러·16비트 depth·CameraInfo·TF·관절 값을 프레임별로 저장(라벨 초안과 오프라인 분석의 입력). 데이터셋(이미지 약 50 장)은 repo 밖 `/workspace/vision_ws/datasets/dynamixel_seg`.

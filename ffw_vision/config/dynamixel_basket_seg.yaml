@@ -33,5 +33,9 @@
     angle_method: edges  # edges = color edge directions, min_area_rect = top points
     edge_min_px: 30  # fewer strong edge pixels -> min_area_rect
     edge_min_share: 0.15  # weight within 5 deg of the peak; less -> min_area_rect
+    edge_skip_blue: true  # edges only from non-blue mask pixels +1 px; false = whole mask (before 2026-11-05)
+    face_long: 0.0465  # m, DYNAMIXEL box sides: the drawn top face (8765) only
+    face_mid: 0.034
+    face_short: 0.0285
     min_depth: 0.07
     max_depth: 1.0
