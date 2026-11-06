@@ -8,6 +8,6 @@
     camera_z_bias: 0.016  # camera reads the table +16 mm (0.736 vs tape 0.720); set after G3
     arm_z_bias: 0.005  # G3 ruler at hover vs FK: 0.720 + 0.125 - (0.835 + 0.005); was 0.010 when
     # the FK tip used 5 cm fingers (same command when vertical, tilted tips ~3 mm off the robot)
-    camera_x_bias: -0.008  # G4: grasps land a little toward the robot (user 2026-10-29);
-    # first try: aim 8 mm further from the robot, tune from the next grasps
+    camera_x_bias: 0.008  # with OBB centers (user 2026-11-06): -0.008 and 0 landed too far from
+    # the robot, +0.008 centered; was -0.008 for seg centers (G4, 2026-10-29)
     camera_y_bias: 0.0
