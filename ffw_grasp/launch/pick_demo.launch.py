@@ -21,7 +21,7 @@ def generate_launch_description():
         DeclareLaunchArgument('camera_id', default_value='right_wrist'),
         DeclareLaunchArgument(
             'detect_file',
-            default_value=os.path.join(vision_share, 'config', 'dynamixel_basket_seg.yaml')),
+            default_value=os.path.join(vision_share, 'config', 'dynamixel_basket_hybrid.yaml')),
         DeclareLaunchArgument(
             'grasp_file',
             default_value=os.path.join(grasp_share, 'config', 'dynamixel_top_grasp.yaml')),
