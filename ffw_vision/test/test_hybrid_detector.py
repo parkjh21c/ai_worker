@@ -87,6 +87,10 @@ class TestDetectHybrid(unittest.TestCase):
                                   [(box_corners(s), 0.9)], params)
         self.assertAlmostEqual(obj.length_m, 0.0465)
         self.assertAlmostEqual(obj.width_m, 0.0285)
+        # the pixel sizes (what the grasp planner reads) follow the known face too
+        half_long = turned_axis(s, 0) * 0.0465 / 2
+        tip, tail = project([s.center + half_long, s.center - half_long], K, s.d)
+        self.assertAlmostEqual(obj.length, float(np.hypot(*(tip - tail))), delta=0.5)
         self.assertEqual(obj.angle_period, math.pi)  # a rectangle, not near square
         self.assertFalse(obj.ambiguous)
         big = Scene(tilt_deg=30, box=(0.01, 0.0, 0.080, 0.060, 37, 0.034), d=D405)  # two in one

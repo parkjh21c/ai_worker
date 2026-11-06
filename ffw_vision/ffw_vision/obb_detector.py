@@ -56,15 +56,16 @@ def face_object(center, axis, length_m, width_m, top_level, score, outline, sour
     limits: (long, short) above which the face is ambiguous; default max_single_length/width.
     The ambiguity uses the given (measured) size; with report_face_size the known face is output.
     """
+    max_long, max_short = limits or (params.max_single_length, params.max_single_width)
+    ambiguous = length_m > max_long or width_m > max_short
+    if params.report_face_size:
+        length_m, width_m = known_face(top_level, params) or (length_m, width_m)
+    # pixel sizes from the reported size: the grasp planner reads these, not length_m
     half_long, half_short = axis * length_m / 2, np.cross(n, axis) * width_m / 2
     (u, v), tip, tail, side, other = project(
         [center, center + half_long, center - half_long, center + half_short,
          center - half_short], k, d)
     angle = normalize_angle(math.atan2(tip[1] - v, tip[0] - u))
-    max_long, max_short = limits or (params.max_single_length, params.max_single_width)
-    ambiguous = length_m > max_long or width_m > max_short
-    if params.report_face_size:
-        length_m, width_m = known_face(top_level, params) or (length_m, width_m)
     pose = 'standing' if top_level >= params.standing_min_height else 'lying'
     square = (length_m / max(width_m, 1e-6) < params.square_ratio
               or (pose == 'standing' and params.standing_square))
